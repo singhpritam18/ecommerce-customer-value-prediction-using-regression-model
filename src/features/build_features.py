@@ -94,6 +94,11 @@ def build_rfm_features(
             "Check that InvoiceDate is parsed as datetime."
         )
 
+    # Sort by InvoiceDate so that "last" in aggregations is chronologically last.
+    # This is critical for the country assignment: without sorting, .agg(..., "last")
+    # returns the last row in DataFrame order, which may not be the most recent purchase.
+    pre = pre.sort_values("InvoiceDate")
+
     # Invoice-level spend (for avg_basket_value)
     invoice_spend = (
         pre.groupby(["Customer ID", "Invoice"])["line_total"]
@@ -108,7 +113,8 @@ def build_rfm_features(
         frequency=("Invoice", "nunique"),
         monetary=("line_total", "sum"),
         unique_products=("StockCode", "nunique"),
-        # Country of most recent transaction
+        # Country of most recent transaction (pre is sorted by InvoiceDate so
+        # "last" is guaranteed to be the chronologically most recent country).
         country=("Country", "last"),
     )
 
