@@ -281,7 +281,7 @@
     "mean_cv_r2_log": 0.251098,
     "std_cv_r2_log": 0.051559
   },
-  "training_timestamp": "2026-10-10T18:41:57.539071+00:00",
+  "training_timestamp": "2026-10-10T19:30:03.998415+00:00",
   "n_training_customers": 4374,
   "training_summary": {
     "n_customers": 4374,
