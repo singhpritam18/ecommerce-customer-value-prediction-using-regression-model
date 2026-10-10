@@ -54,6 +54,12 @@ from ecommerce_customer_value_prediction.features.build_features import (
     save_customer_dataset,
 )
 from ecommerce_customer_value_prediction.models.evaluate import evaluate, METRICS_PATH
+from ecommerce_customer_value_prediction.models.tune import (
+    PARAM_GRIDS,
+    run_cv,
+    run_grid_search,
+    save_cv_results,
+)
 from ecommerce_customer_value_prediction.models.train import (
     CATEGORICAL_FEATURES,
     FINAL_METADATA_PATH,
@@ -400,6 +406,14 @@ def main(
     l1_ratio: float = typer.Option(0.5, help="ElasticNet L1/L2 mixing ratio (0=Ridge, 1=Lasso)."),
     test_size: float = typer.Option(TEST_SIZE, help="Held-out test fraction."),
     random_state: int = typer.Option(RANDOM_STATE, help="Random seed for reproducibility."),
+    tune: bool = typer.Option(
+        False,
+        help=(
+            "Run GridSearchCV on the TRAINING SET ONLY to select the best "
+            "hyperparameters. The final test set is never evaluated here. "
+            "Results saved to reports/metrics/cv_results.csv."
+        ),
+    ),
 ) -> None:
     """
     Run the end-to-end training pipeline from the command line.
@@ -412,18 +426,50 @@ def main(
       Train Ridge with custom alpha:
         python -m ecommerce_customer_value_prediction.pipelines.training_pipeline --model ridge --alpha 10.0
 
+      Tune Ridge (GridSearchCV on training set only — test set NOT touched):
+        python -m ecommerce_customer_value_prediction.pipelines.training_pipeline --model ridge --tune
+
       Train all four models and compare:
         python -m ecommerce_customer_value_prediction.pipelines.training_pipeline --experiment all
     """
     if experiment and experiment.lower() == "all":
         results = run_experiment_all(test_size=test_size, random_state=random_state)
         print("\n=== Model Comparison ===")
-        print(results[["model", "cv_cv_r2", "cv_cv_rmse_log", "test_r2_log", "test_rmse_log", "test_mae_gbp"]].to_string(index=False))
+        print(results.to_string(index=False))
         return
 
     model_lower = model.lower().strip()
     if model_lower not in SUPPORTED_MODELS:
         raise typer.BadParameter(f"--model must be one of {SUPPORTED_MODELS}")
+
+    if tune:
+        # --tune: run GridSearchCV on training set, save cv_results.csv, stop.
+        # The test set is NOT evaluated.
+        logger.info(f"Tuning {model_lower} on training set only (test set frozen).")
+        df = _load_cleaned()
+        customer_df = build_customer_dataset(df, prediction_date=PREDICTION_DATE)
+        train_df, _test_df = _make_stratified_split(customer_df, test_size, random_state)
+        logger.info(
+            f"Train: {len(train_df):,}  |  Test (frozen, not evaluated): {len(_test_df):,}"
+        )
+
+        if model_lower == "linear":
+            # OLS has no grid — run plain CV
+            from ecommerce_customer_value_prediction.models.tune import run_cv as _run_cv
+            result = _run_cv("linear", train_df)
+            print(f"\nOLS CV (log1p scale — not £):")
+            print(f"  Mean CV RMSE_log : {result['mean_cv_rmse_log']:.4f}")
+            print(f"  Mean CV MAE_log  : {result['mean_cv_mae_log']:.4f}")
+            print(f"  Mean CV R²       : {result['mean_cv_r2_log']:.4f}")
+        else:
+            gs, results_df = run_grid_search(model_lower, train_df)
+            best = gs.best_params_
+            print(f"\nBest params for {model_lower} (CV RMSE_log, log1p scale — not £):")
+            print(f"  {best}")
+            print(f"  Best CV RMSE_log = {-gs.best_score_:.4f}")
+            cv_path = save_cv_results(results_df)
+            print(f"\nCV results saved → {cv_path}")
+        return
 
     run_training_pipeline(
         model_name=model_lower,
