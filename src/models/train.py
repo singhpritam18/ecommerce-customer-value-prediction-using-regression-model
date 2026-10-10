@@ -3,18 +3,15 @@ train.py — Model training for customer future-revenue prediction.
 
 Responsibility
 --------------
-Fit a regularised regression pipeline on the customer-level dataset and
-persist the fitted pipeline to disk.
+Fit a regression pipeline on the customer-level dataset and persist the
+fitted pipeline to disk.
 
-Algorithm choice
------------------
-Ridge regression is the baseline estimator.  Reasons:
-* The target (``log1p_future_revenue``) is continuous and approximately
-  normal after log-transform.
-* Ridge handles multicollinearity between RFM features (e.g., frequency
-  and monetary are correlated).
-* It is fast, interpretable, and provides a strong baseline against which
-  more complex models can be benchmarked.
+Supported estimators
+--------------------
+LinearRegression : Unregularised OLS baseline (Step 6).
+Ridge            : L2-regularised regression (Step 7).
+Lasso            : L1-regularised regression (Step 8).
+ElasticNet       : Combined L1+L2 regularisation (Step 8).
 
 Pipeline design
 ----------------
@@ -25,7 +22,7 @@ The sklearn Pipeline encapsulates preprocessing + model in one object so that:
 
 Preprocessing applied
 ----------------------
-Numeric features   : StandardScaler (Ridge is sensitive to feature scale).
+Numeric features   : StandardScaler (essential for fair regularisation comparison).
 Categorical feature: OneHotEncoder (country).
 """
 
@@ -36,8 +33,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from loguru import logger
+from sklearn.base import BaseEstimator
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -61,9 +59,13 @@ CATEGORICAL_FEATURES: list[str] = ["country"]
 
 TARGET_COL: str = "log1p_future_revenue"
 
-# Default serialisation path
+# Default serialisation paths (Ridge kept for backward compatibility)
 MODEL_PATH: Path = MODELS_DIR / "ridge_pipeline.pkl"
 METADATA_PATH: Path = MODELS_DIR / "ridge_pipeline_metadata.json"
+
+# OLS baseline paths
+OLS_MODEL_PATH: Path = MODELS_DIR / "ols_pipeline.pkl"
+OLS_METADATA_PATH: Path = MODELS_DIR / "ols_pipeline_metadata.json"
 
 
 # ---------------------------------------------------------------------------
@@ -71,19 +73,25 @@ METADATA_PATH: Path = MODELS_DIR / "ridge_pipeline_metadata.json"
 # ---------------------------------------------------------------------------
 
 
-def build_pipeline(alpha: float = 1.0) -> Pipeline:
+def build_pipeline(estimator: BaseEstimator | None = None, alpha: float = 1.0) -> Pipeline:
     """
-    Construct (but do not fit) the preprocessing + Ridge pipeline.
+    Construct (but do not fit) the preprocessing + regression pipeline.
 
     Parameters
     ----------
+    estimator : sklearn estimator or None
+        The regression model to use.  Defaults to ``Ridge(alpha=alpha)`` when
+        ``None``.  Pass ``LinearRegression()`` for the unregularised baseline.
     alpha : float
-        Ridge regularisation strength. Larger values → stronger regularisation.
+        Regularisation strength used when ``estimator`` is ``None`` (Ridge default).
 
     Returns
     -------
     sklearn.pipeline.Pipeline
     """
+    if estimator is None:
+        estimator = Ridge(alpha=alpha)
+
     numeric_transformer = StandardScaler()
     categorical_transformer = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
 
@@ -98,7 +106,7 @@ def build_pipeline(alpha: float = 1.0) -> Pipeline:
     pipeline = Pipeline(
         steps=[
             ("preprocessor", preprocessor),
-            ("regressor", Ridge(alpha=alpha)),
+            ("regressor", estimator),
         ]
     )
     return pipeline
@@ -111,30 +119,33 @@ def build_pipeline(alpha: float = 1.0) -> Pipeline:
 
 def train(
     customer_df: pd.DataFrame,
+    estimator: BaseEstimator | None = None,
     alpha: float = 1.0,
     random_state: int = 42,
 ) -> tuple[Pipeline, dict]:
     """
-    Fit the Ridge pipeline on *all* available labelled customers.
+    Fit a regression pipeline on the supplied customer dataset.
 
     The caller is responsible for any train/test split before calling this
-    function if held-out evaluation is required.  The ``pipelines`` module
-    performs the full train/evaluate workflow.
+    function if held-out evaluation is required.
 
     Parameters
     ----------
     customer_df : pd.DataFrame
         Modelling-ready customer dataset (output of ``build_customer_dataset``).
         Must contain all NUMERIC_FEATURES, CATEGORICAL_FEATURES, and TARGET_COL.
+    estimator : sklearn estimator or None
+        Regression model to use.  Defaults to ``Ridge(alpha=alpha)`` when ``None``.
+        Pass ``LinearRegression()`` for the unregularised OLS baseline.
     alpha : float
-        Ridge regularisation strength.
+        Ridge regularisation strength (ignored when ``estimator`` is provided).
     random_state : int
-        Passed to Ridge (no effect on Ridge itself, but kept for consistency).
+        Kept for API consistency; not used by LinearRegression or Ridge.
 
     Returns
     -------
     pipeline : fitted sklearn Pipeline
-    metadata : dict with training metadata (feature names, shape, alpha)
+    metadata : dict with training metadata (feature names, shape, estimator name)
     """
     required = NUMERIC_FEATURES + CATEGORICAL_FEATURES + [TARGET_COL]
     missing = [c for c in required if c not in customer_df.columns]
@@ -144,22 +155,23 @@ def train(
     X = customer_df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
     y = customer_df[TARGET_COL]
 
-    pipeline = build_pipeline(alpha=alpha)
+    pipeline = build_pipeline(estimator=estimator, alpha=alpha)
     pipeline.fit(X, y)
 
+    estimator_name = type(pipeline.named_steps["regressor"]).__name__
     metadata = {
         "n_customers": int(len(customer_df)),
         "numeric_features": NUMERIC_FEATURES,
         "categorical_features": CATEGORICAL_FEATURES,
         "target_col": TARGET_COL,
-        "alpha": alpha,
+        "estimator": estimator_name,
+        "alpha": alpha if estimator is None else None,
         "y_mean": float(y.mean()),
         "y_std": float(y.std()),
     }
 
     logger.success(
-        f"[train] Fitted Ridge pipeline on {len(customer_df):,} customers "
-        f"(alpha={alpha})."
+        f"[train] Fitted {estimator_name} pipeline on {len(customer_df):,} customers."
     )
     return pipeline, metadata
 
