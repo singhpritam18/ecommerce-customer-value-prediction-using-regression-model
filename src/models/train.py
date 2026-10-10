@@ -32,13 +32,13 @@ by name.  Supported names: "linear", "ridge", "lasso", "elasticnet".
 """
 
 import json
-import pickle
 from pathlib import Path
+import pickle
 from typing import Any
 
-import numpy as np
-import pandas as pd
+import joblib
 from loguru import logger
+import pandas as pd
 from sklearn.base import BaseEstimator
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import ElasticNet, Lasso, LinearRegression, Ridge
@@ -88,6 +88,8 @@ ELASTICNET_METADATA_PATH: Path = MODELS_DIR / "elasticnet_pipeline_metadata.json
 
 FINAL_MODEL_PATH: Path = MODELS_DIR / "customer_value_model.pkl"
 FINAL_METADATA_PATH: Path = MODELS_DIR / "customer_value_model_metadata.json"
+PACKAGED_MODEL_PATH: Path = MODELS_DIR / "customer_value_model.joblib"
+PACKAGED_METADATA_PATH: Path = MODELS_DIR / "model_metadata.json"
 
 # Mapping from model name → (model_path, metadata_path)
 MODEL_PATHS: dict[str, tuple[Path, Path]] = {
@@ -139,10 +141,7 @@ def create_model(model_name: str, **hyperparameters: Any) -> BaseEstimator:
     """
     name = model_name.lower().strip()
     if name not in SUPPORTED_MODELS:
-        raise ValueError(
-            f"Unknown model_name '{model_name}'. "
-            f"Supported: {SUPPORTED_MODELS}"
-        )
+        raise ValueError(f"Unknown model_name '{model_name}'. Supported: {SUPPORTED_MODELS}")
 
     # Lasso and ElasticNet use coordinate descent; needs more iterations for
     # convergence on standardised data.  Use 10_000 as a safe default.
@@ -262,7 +261,7 @@ def train(
         hparams["fit_intercept"] = bool(estimator_obj.fit_intercept)
 
     metadata = {
-        "n_customers": int(len(customer_df)),
+        "n_customers": len(customer_df),
         "numeric_features": NUMERIC_FEATURES,
         "categorical_features": CATEGORICAL_FEATURES,
         "target_col": TARGET_COL,
@@ -325,12 +324,17 @@ def load_model(model_path: Path = MODEL_PATH) -> Pipeline:
     -------
     fitted sklearn Pipeline
     """
+    model_path = Path(model_path)
     if not model_path.exists():
         raise FileNotFoundError(
-            f"No model found at {model_path}. "
-            "Run the training pipeline first: make train"
+            f"No model found at {model_path}. Run the training pipeline first: make train"
         )
-    with open(model_path, "rb") as f:
-        pipeline = pickle.load(f)
+    if model_path.suffix == ".joblib":
+        pipeline = joblib.load(model_path)
+    else:
+        with open(model_path, "rb") as f:
+            pipeline = pickle.load(f)
+    if not isinstance(pipeline, Pipeline):
+        raise TypeError(f"{model_path} does not contain a sklearn Pipeline.")
     logger.info(f"[load_model] Pipeline loaded from {model_path}")
     return pipeline

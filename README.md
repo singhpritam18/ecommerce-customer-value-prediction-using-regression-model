@@ -1,282 +1,313 @@
 # E-Commerce Customer Value Prediction
 
-Predict future 4-month gross revenue for each customer using RFM-style features and Ridge regression on the [Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii) dataset (UCI ML Repository).
+An educational regression project that predicts customer-level future gross
+purchase revenue from historical RFM-style features. It compares ordinary least
+squares (OLS), Ridge, Lasso, and ElasticNet, then packages a fitted preprocessing
+and regression pipeline for another developer to use **without training**.
 
----
+**Readiness: EDUCATIONAL / PORTFOLIO PROTOTYPE READY. Not suitable for business
+revenue forecasting or production deployment.** The selected model has modest
+log-space predictive performance and severe GBP-space outlier errors.
+See the [model card](reports/model_card.md).
 
-## Project Structure
+## Dataset and prediction problem
 
-```
-ecommerce-customer-value-prediction/
-│
-├── data/                                  ← All data (never commit raw data to git)
-│   ├── raw/                               ← IMMUTABLE source files; downloaded once
-│   │   └── online_retail_II.xlsx          ← UCI Online Retail II dataset
-│   ├── interim/                           ← Cleaned transaction-level output
-│   │   └── transactions_cleaned.csv       ← Produced by `make clean-data`
-│   └── processed/                         ← Customer-level modelling dataset
-│       └── customer_dataset.csv           ← Produced by `make train` (feature + target)
-│
-├── models/                                ← Serialised model artifacts
-│   ├── ridge_pipeline.pkl                 ← Fitted sklearn Pipeline (pickle)
-│   └── ridge_pipeline_metadata.json       ← Training config & statistics
-│
-├── notebooks/                             ← Jupyter notebooks for exploration & reporting
-│   ├── 01-initial-data-exploration.ipynb  ← Schema, missing values, distributions, time range
-│   └── 02-data-cleaning.ipynb             ← Step-by-step cleaning with decision narrative
-│
-├── reports/
-│   ├── figures/                           ← Saved plots (EDA charts, residual plots, etc.)
-│   └── metrics/
-│       └── evaluation_metrics.json        ← Hold-out test metrics (R², RMSE, MAE in log+GBP)
-│
-├── src/                                   ← Package root mapped to ecommerce_customer_value_prediction
-│   │                                          (installed via `pip install -e .`)
-│   ├── __init__.py                        ← Package version & top-level re-exports
-│   │
-│   ├── config/                            ← Centralised project configuration
-│   │   ├── __init__.py                    ← Re-exports all path constants
-│   │   └── settings.py                    ← PROJ_ROOT, *_DATA_DIR, MODELS_DIR, METRICS_DIR
-│   │
-│   ├── data/                              ← Raw → interim data pipeline
-│   │   ├── __init__.py                    ← Re-exports run_cleaning_pipeline, validate_cleaned
-│   │   ├── load_data.py                   ← load_raw_data(): reads Excel workbook → DataFrame
-│   │   ├── clean_data.py                  ← run_cleaning_pipeline(): 6-step filtering + type coercion
-│   │   │                                  │   • drop_missing_customer_id
-│   │   │                                  │   • drop_full_duplicates
-│   │   │                                  │   • keep_positive_qty_and_price
-│   │   │                                  │   • drop_cancellation_invoices (C-prefix)
-│   │   │                                  │   • drop_nonstandard_stockcodes (POST, DOT, …)
-│   │   │                                  │   • enforce_dtypes + create_line_total
-│   │   └── validate_data.py               ← Two layers of validation:
-│   │                                      │   • Diagnostic reporters (used by notebooks)
-│   │                                      │   • validate_cleaned() hard assertions (used by pipelines)
-│   │
-│   ├── features/                          ← Interim → processed feature engineering
-│   │   ├── __init__.py                    ← Re-exports build_customer_dataset, PREDICTION_DATE
-│   │   └── build_features.py              ← build_rfm_features()  → per-customer RFM features
-│   │                                      │   build_target()        → future_revenue + log1p transform
-│   │                                      │   build_customer_dataset() → join features + target
-│   │                                      │   save_customer_dataset()  → write to data/processed/
-│   │
-│   ├── models/                            ← Model training, evaluation, and inference
-│   │   ├── __init__.py                    ← Re-exports train, evaluate, predict, load_model, save_model
-│   │   ├── train.py                       ← build_pipeline() → sklearn Pipeline (StandardScaler + OHE + Ridge)
-│   │   │                                  │   train()      → fit pipeline, return metadata dict
-│   │   │                                  │   save_model() → pickle pipeline + JSON metadata
-│   │   │                                  │   load_model() → deserialise from disk
-│   │   ├── evaluate.py                    ← evaluate() → RMSE/MAE/R² in log-space and GBP-space
-│   │   │                                  │   saves results to reports/metrics/evaluation_metrics.json
-│   │   └── predict.py                     ← predict() → load pipeline + append pred columns to DataFrame
-│   │                                      │   pred_log1p_future_revenue, pred_future_revenue (GBP)
-│   │
-│   └── pipelines/                         ← End-to-end workflow orchestration
-│       ├── __init__.py                    ← Re-exports run_training_pipeline
-│       └── training_pipeline.py           ← run_training_pipeline():
-│                                          │   1. Load / generate cleaned transactions
-│                                          │   2. Build customer dataset (features + target)
-│                                          │   3. Stratified 80/20 train/test split
-│                                          │   4. Fit pipeline on train, evaluate on test
-│                                          │   5. Refit final pipeline on full data, save model
-│
-├── tests/                                 ← Pytest test suite (no real dataset required)
-│   ├── test_data.py                       ← 27 tests: cleaning functions + diagnostic reporters
-│   ├── test_features.py                   ← 16 tests: RFM features, target, Group A/B/C logic
-│   └── test_models.py                     ← 18 tests: train / evaluate / predict / save-load
-│
-├── docs/                                  ← MkDocs documentation source
-│   └── docs/
-│       ├── index.md
-│       ├── getting-started.md
-│       └── problem-formulation.md
-│
-├── references/                            ← Data dictionaries, papers, background reading
-├── .gitignore
-├── LICENSE                                ← MIT
-├── Makefile                               ← make install | clean-data | train | test | lint | format
-├── pyproject.toml                         ← Build system (hatchling), dependencies, pytest config
-├── requirements.txt                       ← Pinned environment snapshot (pip freeze)
-└── README.md
-```
+Source: [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii).
+The local cleaned extract used in this experiment contains **84,955 transactions**
+from **2009-12-01 through 2011-12-09**, yielding **4,374 historical customers**.
+This is the observed local extract, not a claim of using every workbook row.
 
----
+- Cutoff: **2011-09-01**.
+- Features use transactions strictly before the cutoff.
+- `future_revenue` sums cleaned `line_total` on or after the cutoff.
+- Target: `log1p_future_revenue = log(1 + future_revenue)`.
+- Intended horizon: approximately four months. Actual observation ends on
+  **2011-12-09**, 99 calendar days after the cutoff, not December 31.
+  The implementation sums all available post-cutoff rows; it does not enforce
+  a four-month endpoint on an extended dataset.
+- Customers with historical purchases but no future purchases have target zero
+  (64.70% of customer rows). Customers with no pre-cutoff history are excluded.
+- Cleaning excludes missing customer IDs, duplicate rows, nonpositive quantity
+  or price, cancellations, and nonstandard stock codes. This is **gross purchase
+  revenue**, not profit, net revenue, or lifetime value.
 
-## Setup
+Raw data remains immutable in `data/raw/`. Local data is ignored by Git.
+SHA-256 fingerprints and cleaned-data/feature-rebuild validation are recorded in
+the [selection artifact](reports/metrics/final_experiment/selection.json).
 
-### 1. Prerequisites
+## Features and expected input schema
 
-- Python ≥ 3.10
-- `pip`
+Provide one row per customer, with these **eight required fields**:
 
-### 2. Clone and install
+| Field | Type | Definition |
+|---|---|---|
+| `recency_days` | finite real number | Whole days from last historical purchase to cutoff |
+| `frequency` | finite real number | Count of distinct historical invoices |
+| `monetary` | finite real number | Historical sum of `line_total`, GBP |
+| `avg_basket_value` | finite real number | Mean historical invoice spend, GBP |
+| `unique_products` | finite real number | Count of distinct historical StockCodes |
+| `tenure_days` | finite real number | Whole days between first and last historical purchases |
+| `purchase_rate` | finite real number | `frequency / tenure_days`; zero when tenure is zero |
+| `country` | non-empty string | Country of most recent historical transaction |
 
-```bash
+Integer and floating-point numeric columns are accepted without changing their
+input dtypes. Numeric strings, booleans, complex values, nulls, NaN, infinity,
+missing columns, duplicate column names, and empty input are rejected.
+Numeric CSV text is parsed into numeric columns by pandas; malformed values are
+rejected rather than silently coerced.
+
+Extra columns, such as `customer_reference`, are retained but never used as
+predictors. Unknown countries are supported through the fitted encoder's
+`handle_unknown="ignore"` policy (all-zero country encoding).
+The identifier and target columns are not predictors.
+
+Construct features with the same definitions and historical window as training.
+The supported prototype interface is **customer-level features**, not arbitrary
+raw transactions. The existing `build_rfm_features` correctly excludes
+post-cutoff rows when given cleaned transactions, but assumes validated cleaning,
+timestamps, complete history, and a supplied cutoff. It is not a safe general
+raw-transaction service contract, so no raw-transaction inference endpoint is
+exposed.
+
+## Completed experiment and regularization findings
+
+The source pipeline's split is frozen: **3,499 training / 875 test customers**,
+80/20, `random_state=42`, stratified by zero versus positive future revenue.
+Preprocessing is fitted inside every CV fold: `StandardScaler` for seven numeric
+features and dense `OneHotEncoder(handle_unknown="ignore")` for country.
+
+Five-fold shuffled, binary-stratified training CV uses the grids in
+[tune.py](src/models/tune.py). Each model's configuration and the overall winner
+are locked using **minimum mean CV RMSE in log1p space before test evaluation**.
+All four locked pipelines are then evaluated once on the reserved test rows.
+
+| Model | Locked regularization | CV RMSE log (mean +/- std) | Test RMSE log | Test R2 log | Test RMSE GBP | Test MAE GBP |
+|---|---|---:|---:|---:|---:|---:|
+| OLS | none | 1.728911 +/- 0.073463 | 1.697233 | 0.259848 | 74,634.82 | 2,737.28 |
+| **Ridge** | **alpha=10.0** | **1.725261 +/- 0.070007** | **1.690147** | **0.266016** | **52,996.15** | **2,570.97** |
+| Lasso | alpha=0.05 | 1.726086 +/- 0.060478 | 1.682392 | 0.272736 | 20,353.49 | 994.88 |
+| ElasticNet | alpha=0.1, l1_ratio=0.75 | 1.725480 +/- 0.056377 | 1.682621 | 0.272538 | 11,112.11 | 556.38 |
+
+Ridge's L2 shrinkage retains all features; Lasso's L1 penalty permits sparse
+coefficients; ElasticNet combines shrinkage and sparsity. Regularization improves
+CV log RMSE only slightly over OLS. The differences between model families are
+much smaller than fold variability and do not establish a statistically
+significant winner. Some alternatives perform better on the test set, especially
+in GBP space; **that inspection does not change the CV-locked selection**.
+
+The authoritative [experiment outputs](reports/metrics/final_experiment/) contain
+the candidate grids, all locked hyperparameters, CV results, split/dataset
+fingerprints, test metrics, and error analysis. The older unexecuted notebooks
+are explanatory research material, not evidence of a completed experiment:
+notebook 08 uses a different split and test-based model selection. Do not run it
+to recreate or change this locked artifact.
+
+## Final model and artifacts
+
+**Final estimator: Ridge, alpha=10.0, fit_intercept=True**, with the remaining
+sklearn constructor parameters recorded in [model_metadata.json](models/model_metadata.json).
+The saved object is the complete fitted sklearn `Pipeline`, not just an estimator.
+
+- [customer_value_model.joblib](models/customer_value_model.joblib): inference artifact.
+- [model_metadata.json](models/model_metadata.json): features, categorical schema,
+  target/transform, horizon, full hyperparameters, training timestamp, dataset
+  fingerprint, CV/test metrics, preprocessing, version information, and checksum.
+- [runtime-constraints.txt](models/runtime-constraints.txt): exact inference stack.
+
+Post-selection policy: refit the locked selected pipeline on **all 4,374 customer
+rows** after evaluation. The reported test metrics belong to the earlier
+training-partition fit, **not an independent evaluation of the full-data refit**.
+No new tuning, feature changes, target changes, clipping, or bias correction
+occurs during packaging.
+
+For Ridge, the final recorded test metrics are RMSE log **1.690147**, MAE log
+**1.363400**, R2 log **0.266016**, RMSE GBP **52,996.15**, MAE GBP **2,570.97**,
+and median absolute error GBP **3.45**.
+
+## Installation
+
+The source package declares Python >=3.10. This saved artifact's pinned stack
+requires **Python >=3.12**; the verified runtime is **Python 3.13** with
+scikit-learn **1.9.1**. Use the artifact's constraints, not the older exploratory
+`requirements.txt` snapshot.
+
+```powershell
 git clone https://github.com/singhpritam18/ecommerce-customer-value-prediction-using-regression-model.git
-cd ecommerce-customer-value-prediction
-
-# Create a virtual environment (optional but recommended)
+cd ecommerce-customer-value-prediction-using-regression-model
 python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# Unix / macOS
-source .venv/bin/activate
-
-# Install the package in editable mode
-pip install -e .
+.\.venv\Scripts\Activate.ps1
+python -m pip install -c models\runtime-constraints.txt -e .
 ```
 
-### 3. Download the raw dataset
+On macOS/Linux, activate with `source .venv/bin/activate` and use the equivalent
+platform paths. Import the installed `ecommerce_customer_value_prediction`
+package; no notebook path hacks or `conftest.py` aliases are needed.
 
-Download **online_retail_II.xlsx** from the [UCI ML Repository](https://archive.ics.uci.edu/dataset/502/online+retail+ii) and place it at:
+Keep the repository's `models/` files together. If moving an artifact elsewhere,
+pass its explicit path to `load_model` or the CLI. Only load trusted joblib/pickle
+files: deserialization can execute code. The loader checks the packaged artifact's
+sklearn version, checksum, and target transformation before loading it.
 
-```
-data/raw/online_retail_II.xlsx
-```
+## Single-customer prediction
 
-The raw file is **never modified** by any pipeline step.
-
----
-
-## Usage
-
-All commands are available via `make`. Run `make help` to see all targets.
-
-### Run the cleaning pipeline
-
-```bash
-make clean-data
-# Produces: data/interim/transactions_cleaned.csv
-```
-
-### Run the full training pipeline
-
-```bash
-make train
-# Reads:    data/interim/transactions_cleaned.csv
-# Produces: data/processed/customer_dataset.csv
-#           models/ridge_pipeline.pkl
-#           models/ridge_pipeline_metadata.json
-#           reports/metrics/evaluation_metrics.json
-```
-
-### View evaluation metrics
-
-```bash
-make metrics
-```
-
-### Run all tests
-
-```bash
-make test
-# 61 tests across test_data.py, test_features.py, test_models.py
-# No real dataset required — all tests use synthetic in-memory data
-```
-
-### Lint and format
-
-```bash
-make lint      # check only
-make format    # auto-fix
-```
-
----
-
-## Modelling Approach
-
-### Problem
-
-Predict each customer's **gross revenue over the next 4 months** (2011-09-01 to 2011-12-31), given their purchase history up to the prediction date.
-
-### Prediction date
-
-`2011-09-01` — separates the feature-construction window (pre-cutoff) from the revenue-measurement window (post-cutoff).
-
-### Customer groups
-
-| Group | Description | Target |
-|---|---|---|
-| A | Pre-cutoff only | `future_revenue = 0` |
-| B | Post-cutoff only | Excluded (no feature history) |
-| C | Both periods | `future_revenue = sum of post-cutoff line_total` |
-
-### Features (RFM-style)
-
-| Feature | Description |
-|---|---|
-| `recency_days` | Days since last pre-cutoff purchase |
-| `frequency` | Unique invoices pre-cutoff |
-| `monetary` | Total spend pre-cutoff (GBP) |
-| `avg_basket_value` | Mean invoice spend pre-cutoff |
-| `unique_products` | Distinct StockCodes purchased |
-| `tenure_days` | Days between first and last purchase |
-| `purchase_rate` | Invoices per day of tenure |
-| `country` | Country of most recent purchase |
-
-### Target
-
-`log1p_future_revenue = log(future_revenue + 1)` — log-transform makes the target approximately normal and enables safe regression.
-
-### Model
-
-**Ridge regression** (scikit-learn `Pipeline` with `StandardScaler` + `OneHotEncoder`)
-
-- Handles multicollinearity between RFM features.
-- Fast, interpretable baseline.
-- `alpha=1.0` default; tunable via `make train --alpha <value>`.
-
-### Evaluation metrics
-
-Both log-space (optimised) and GBP-space (business-interpretable):
-
-```
-rmse_log, mae_log, r2_log
-rmse_gbp, mae_gbp, median_ae_gbp
-```
-
----
-
-## Data Cleaning Decisions
-
-All cleaning logic lives in `src/.../data/clean_data.py` and is documented in `notebooks/02-data-cleaning.ipynb`.
-
-| Step | What was removed | Why |
-|---|---|---|
-| Drop missing Customer ID | ~25% of rows | Cannot attribute to any real customer |
-| Drop full-row duplicates | Extra copies | Data-entry/export errors |
-| Keep Qty > 0 and Price > 0 | Returns, cancellations, free items | Gross revenue only |
-| Drop C-prefix invoices | Remaining cancellations | Not forward purchases |
-| Drop non-standard StockCodes | POST, DOT, AMAZONFEE, etc. | Not product behaviour |
-| Create `line_total` after filtering | (column creation) | Guarantees `line_total > 0` |
-
-Raw data in `data/raw/` is **never overwritten**.
-
----
-
-## Import Convention
-
-After `pip install -e .`, import from the installed package — no `sys.path` manipulation required:
+No dataset download, feature-building job, training, or tuning is required:
 
 ```python
-from ecommerce_customer_value_prediction.data.clean_data import run_cleaning_pipeline
-from ecommerce_customer_value_prediction.features.build_features import build_customer_dataset
-from ecommerce_customer_value_prediction.models.train import train, save_model
-from ecommerce_customer_value_prediction.models.predict import predict
+import pandas as pd
+from ecommerce_customer_value_prediction.models.predict import load_model, predict
+
+customer = pd.DataFrame([{
+    "recency_days": 30,
+    "frequency": 10,
+    "monetary": 1500.0,
+    "avg_basket_value": 150.0,
+    "unique_products": 25,
+    "tenure_days": 300,
+    "purchase_rate": 10 / 300,
+    "country": "United Kingdom",
+}])
+pipeline = load_model()  # models/customer_value_model.joblib
+result = predict(customer, pipeline=pipeline)
+print(result[["pred_log1p_future_revenue", "pred_future_revenue"]])
 ```
 
----
+Verified output, approximately:
 
-## Notebooks
+```text
+pred_log1p_future_revenue  pred_future_revenue
+2.488367                  11.041591
+```
 
-| Notebook | Purpose |
-|---|---|
-| `01-initial-data-exploration.ipynb` | EDA: schema, missing values, distributions, time coverage |
-| `02-data-cleaning.ipynb` | Step-by-step cleaning with Problem → Evidence → Decision narrative |
+`pred_log1p_future_revenue` is the raw regression output.
+`pred_future_revenue = expm1(pred_log1p_future_revenue)` is the GBP-scale
+estimate over the observed prediction horizon, **not a calibrated expected
+revenue or an amount guaranteed to be earned**. Input fields, index, and row order
+are preserved; these two float columns are appended.
 
-Both notebooks import from the installed `src/` package.
+The inverse transform is intentionally unchanged: it can produce negative values
+for negative log predictions and very large values for large log predictions.
+Non-finite results cause an explicit error. No clipping or smearing correction is
+silently applied.
 
----
+Run the working example with `python examples\predict_one.py`.
+
+## Multiple customers and batch prediction
+
+Pass a multirow DataFrame to the same `predict` function. The two synthetic
+customer records in [customer_features.csv](examples/customer_features.csv) are
+ready to use:
+
+```powershell
+predict-customer-value --input examples\customer_features.csv --output customer_predictions.csv
+```
+
+To use a copied artifact:
+
+```powershell
+predict-customer-value --input customer_features.csv --output customer_predictions.csv --model models\customer_value_model.joblib
+```
+
+These commands perform inference only and fail explicitly for invalid input.
+Existing output files are not overwritten; choose a new filename. The
+[verified example output](examples/customer_predictions.csv) contains GBP
+predictions of approximately **11.04** and **5.99** for the two synthetic rows.
+
+## Reproducing experiments and training
+
+**Skip this section to use the saved model.** Download the raw workbook to
+`data/raw/online_retail_II.xlsx` only if preparing training data. `make clean-data`
+and `make features` provide the existing cleaning/feature workflows. The raw file
+is never modified.
+
+Exact reproduction requires the **same local processed snapshot and row order**
+identified by SHA-256 in the selection metadata, plus the pinned runtime.
+The private local data snapshot is not distributed in Git; a fresh/full UCI
+download may produce a different dataset. This limits exact experiment
+reproduction but does not prevent standalone inference from the shipped model.
+
+To execute a deliberately new experiment:
+
+```powershell
+python -m ecommerce_customer_value_prediction.pipelines.final_model experiment --experiment-dir reports\metrics\reproduced_experiment
+```
+
+Each experiment directory is single-use. All candidate configurations and the
+winner are persisted before holdout evaluation. Do not repeat test inspection to
+select a new model. Use a new temporal validation design for new research.
+The prior `reports/metrics/cv_results.csv` is preserved as training-only evidence.
+
+To refit/package the **already locked** experiment without retuning or evaluating
+the test set again:
+
+```powershell
+python -m ecommerce_customer_value_prediction.pipelines.final_model package
+```
+
+This requires the exact locked dataset fingerprint and sklearn version.
+Existing model/metadata files are preserved under timestamped
+`models/archive/` directories before replacement; the archive location is logged.
+Inference never runs this command automatically. Legacy `make train` and
+`make compare-models` are exploratory workflows, not the final packaging command.
+
+## Running tests and lint checks
+
+Verified result: **238 tests passed**. Changed model/packaging/inference code
+passes Ruff formatting and lint checks; the Python package wheel builds
+successfully.
+
+```powershell
+python -m pip install pytest ruff
+python -m pytest tests/ -q
+python -m pytest tests/test_inference.py -q
+python -m pytest tests/test_inference.py::test_save_terminate_reload_matches_and_never_fits -q
+ruff format --check src/ tests/
+ruff check src/ tests/
+```
+
+Tests cover synthetic fit/save/terminated-process reload equivalence at
+`rtol=atol=1e-12`, required schema, extra fields, unknown countries, multiple rows,
+invalid types, non-finite values, archive preservation, and locking before test
+evaluation. A new-user test loads the shipped model and examples in a fresh
+Python process outside the repository working directory, forbids `fit`, checks
+the output schema, and runs the installed batch CLI. Raw data is not required.
+
+## Limitations and production work
+
+- A single historical customer holdout is not temporal backtesting and does not
+  measure performance across future periods, economic conditions, or new cohorts.
+- The target is zero-inflated and long-tailed; the overall median error masks
+  severe errors for revenue-positive/high-value customers.
+- Ridge's held-out mean prediction is **2,541.54 GBP** versus an actual mean of
+  **57.14 GBP**. Its largest absolute error is approximately **1.20 million GBP**.
+  There are **50 negative predictions** among 875 test customers. These are
+  disclosed prototype failures, not business-usable estimates.
+- Simple `expm1` is not calibrated to conditional mean revenue. The observed
+  result has severe overprediction outliers; a generic upward correction is not
+  justified by these diagnostics.
+- Unknown countries are handled technically but not validated geographically.
+  New customers without historical purchases are outside the modeled cohort.
+- The observed horizon is shorter than a complete four months. Currency,
+  cleaning policy, cutoff, and historical coverage must match the input contract.
+- Exact data-snapshot reproduction is limited by undistributed local data.
+
+Real deployment needs rolling **temporal backtesting**, revenue-space calibration
+and error acceptance criteria, validated data contracts/history windows,
+monitoring of input quality and predictive performance, drift detection,
+retraining triggers with fresh independent validation, versioned releases and
+rollback, and operational batch/service deployment with access control and
+reliability testing. Inference working alone is not deployment readiness.
+
+## Project structure
+
+- `src/data/`, `src/features/`: cleaning, validation, customer aggregation.
+- `src/models/`: estimator/preprocessing factories, CV, metrics, validated inference.
+- `src/pipelines/`: legacy workflows and the locked experiment/packaging entry point.
+- `models/`, `examples/`: consumer artifacts, runtime constraints, runnable examples.
+- `reports/metrics/final_experiment/`, `reports/model_card.md`: experiment evidence
+  and intended-use/limitation summary.
+- `notebooks/`, `references/`, `docs/`: research narratives and supporting docs.
+- `tests/`: data, features, modeling, tuning, packaging, and fresh-process inference.
 
 ## License
 
-MIT
+MIT. Dataset use remains subject to its source terms.

@@ -1,0 +1,9 @@
+# Verified artifact runtime: Python 3.13; these pins require Python >=3.12.
+scikit-learn==1.9.1
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.18.1
+joblib==1.6.0
+threadpoolctl==3.7.0
+loguru==0.7.3
+python-dotenv==1.1.1

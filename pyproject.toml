@@ -16,6 +16,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
+    "joblib",
     "ipython",
     "jupyterlab",
     "loguru",
@@ -36,14 +37,19 @@ requires-python = ">=3.10"
 [project.scripts]
 clean-data  = "ecommerce_customer_value_prediction.data.clean_data:app"
 train       = "ecommerce_customer_value_prediction.pipelines.training_pipeline:app"
+predict-customer-value = "ecommerce_customer_value_prediction.models.predict:main"
 
 [tool.setuptools]
 # Map the ecommerce_customer_value_prediction import name to the src/ directory
 package-dir = {"ecommerce_customer_value_prediction" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]
+packages = [
+    "ecommerce_customer_value_prediction",
+    "ecommerce_customer_value_prediction.config",
+    "ecommerce_customer_value_prediction.data",
+    "ecommerce_customer_value_prediction.features",
+    "ecommerce_customer_value_prediction.models",
+    "ecommerce_customer_value_prediction.pipelines",
+]
 
 [tool.pytest.ini_options]
 testpaths  = ["tests"]

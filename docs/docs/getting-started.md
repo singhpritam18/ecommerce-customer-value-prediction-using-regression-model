@@ -1,6 +1,7 @@
-Getting started
-===============
+# Getting started
 
-This is where you describe how to get set up on a clean install, including the
-commands necessary to get the raw data (using the `sync_data_from_s3` command,
-for example), and then how to make the cleaned, final data sets.
+The [root README](../../README.md) is the maintained entry point for installation,
+single-customer inference, CSV batch prediction, experiments, and tests.
+
+Inference uses the saved pipeline and example feature records; downloading the
+transaction dataset or rerunning training is not required.

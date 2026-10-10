@@ -1,0 +1,3 @@
+customer_reference,recency_days,frequency,monetary,avg_basket_value,unique_products,tenure_days,purchase_rate,country
+example-001,30,10,1500.0,150.0,25,300,0.03333333333333333,United Kingdom
+example-002,90,4,400.0,100.0,10,200,0.02,Germany

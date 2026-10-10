@@ -1,0 +1,343 @@
+{
+  "locked_at": "2026-10-10T18:40:42.345137+00:00",
+  "selected_model": "ridge",
+  "selection_rule": "Minimum training-only mean 5-fold CV RMSE on log1p target",
+  "candidates": {
+    "linear": {
+      "model_type": "linear",
+      "estimator_class": "LinearRegression",
+      "hyperparameters": {
+        "copy_X": true,
+        "fit_intercept": true,
+        "n_jobs": null,
+        "positive": false,
+        "tol": 1e-06
+      },
+      "selection_cv_rmse_log": 1.728911,
+      "cv_metrics": {
+        "model_name": "linear",
+        "hyperparameters": {},
+        "n_folds": 5,
+        "mean_cv_mae_log": 1.398178,
+        "std_cv_mae_log": 0.055911,
+        "mean_cv_rmse_log": 1.728911,
+        "std_cv_rmse_log": 0.073463,
+        "mean_cv_r2_log": 0.247781,
+        "std_cv_r2_log": 0.055083
+      }
+    },
+    "ridge": {
+      "model_type": "ridge",
+      "estimator_class": "Ridge",
+      "hyperparameters": {
+        "alpha": 10.0,
+        "copy_X": true,
+        "fit_intercept": true,
+        "max_iter": null,
+        "positive": false,
+        "random_state": null,
+        "solver": "auto",
+        "tol": 0.0001
+      },
+      "selection_cv_rmse_log": 1.7252608564270908,
+      "cv_metrics": {
+        "model_name": "ridge",
+        "hyperparameters": {
+          "alpha": 10.0,
+          "copy_X": true,
+          "fit_intercept": true,
+          "max_iter": null,
+          "positive": false,
+          "random_state": null,
+          "solver": "auto",
+          "tol": 0.0001
+        },
+        "n_folds": 5,
+        "mean_cv_mae_log": 1.399844,
+        "std_cv_mae_log": 0.052029,
+        "mean_cv_rmse_log": 1.725261,
+        "std_cv_rmse_log": 0.070007,
+        "mean_cv_r2_log": 0.251098,
+        "std_cv_r2_log": 0.051559
+      }
+    },
+    "lasso": {
+      "model_type": "lasso",
+      "estimator_class": "Lasso",
+      "hyperparameters": {
+        "alpha": 0.05,
+        "copy_X": true,
+        "fit_intercept": true,
+        "max_iter": 10000,
+        "positive": false,
+        "precompute": false,
+        "random_state": null,
+        "selection": "cyclic",
+        "tol": 0.0001,
+        "warm_start": false
+      },
+      "selection_cv_rmse_log": 1.7260859660293417,
+      "cv_metrics": {
+        "model_name": "lasso",
+        "hyperparameters": {
+          "alpha": 0.05,
+          "copy_X": true,
+          "fit_intercept": true,
+          "max_iter": 10000,
+          "positive": false,
+          "precompute": false,
+          "random_state": null,
+          "selection": "cyclic",
+          "tol": 0.0001,
+          "warm_start": false
+        },
+        "n_folds": 5,
+        "mean_cv_mae_log": 1.416271,
+        "std_cv_mae_log": 0.045716,
+        "mean_cv_rmse_log": 1.726086,
+        "std_cv_rmse_log": 0.060478,
+        "mean_cv_r2_log": 0.250547,
+        "std_cv_r2_log": 0.043983
+      }
+    },
+    "elasticnet": {
+      "model_type": "elasticnet",
+      "estimator_class": "ElasticNet",
+      "hyperparameters": {
+        "alpha": 0.1,
+        "copy_X": true,
+        "fit_intercept": true,
+        "l1_ratio": 0.75,
+        "max_iter": 10000,
+        "positive": false,
+        "precompute": false,
+        "random_state": null,
+        "selection": "cyclic",
+        "tol": 0.0001,
+        "warm_start": false
+      },
+      "selection_cv_rmse_log": 1.7254804792716656,
+      "cv_metrics": {
+        "model_name": "elasticnet",
+        "hyperparameters": {
+          "alpha": 0.1,
+          "copy_X": true,
+          "fit_intercept": true,
+          "l1_ratio": 0.75,
+          "max_iter": 10000,
+          "positive": false,
+          "precompute": false,
+          "random_state": null,
+          "selection": "cyclic",
+          "tol": 0.0001,
+          "warm_start": false
+        },
+        "n_folds": 5,
+        "mean_cv_mae_log": 1.425673,
+        "std_cv_mae_log": 0.042814,
+        "mean_cv_rmse_log": 1.72548,
+        "std_cv_rmse_log": 0.056377,
+        "mean_cv_r2_log": 0.251124,
+        "std_cv_r2_log": 0.040871
+      }
+    }
+  },
+  "parameter_grids": {
+    "linear": {},
+    "ridge": {
+      "regressor__alpha": [
+        0.0001,
+        0.001,
+        0.01,
+        0.1,
+        1.0,
+        10.0,
+        100.0,
+        1000.0,
+        10000.0
+      ]
+    },
+    "lasso": {
+      "regressor__alpha": [
+        0.0001,
+        0.0005,
+        0.001,
+        0.005,
+        0.01,
+        0.05,
+        0.1,
+        0.5,
+        1.0
+      ]
+    },
+    "elasticnet": {
+      "regressor__alpha": [
+        0.0001,
+        0.001,
+        0.01,
+        0.1,
+        1.0
+      ],
+      "regressor__l1_ratio": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ]
+    }
+  },
+  "dataset": {
+    "name": "UCI Online Retail II",
+    "path": "customer_dataset.csv",
+    "sha256": "1bd492b0e35c8993f1d3f4ea83b9f2286527d5a3f36986f0094bf4f530974ca5",
+    "n_customers": 4374,
+    "zero_revenue_fraction": 0.6470050297210791,
+    "cleaned_transactions_sha256": "a70f2c15a8583ef9852d1ec882e1b143f6c11e37f2ebc1fecef49d814861097f",
+    "n_cleaned_transactions": 84955,
+    "history_start": "2009-12-01 07:45:00",
+    "observation_end": "2011-12-09 12:20:00",
+    "observed_target_days": 99,
+    "validation": "Cleaned-data checks and feature rebuild equivalence passed"
+  },
+  "split": {
+    "test_size": 0.2,
+    "random_state": 42,
+    "stratification": "future_revenue > 0",
+    "n_train": 3499,
+    "n_test": 875,
+    "train_customer_ids_sha256": "acdacb13fc44741359bf5b7d86b44fa6a52e3d65e0208068ff2a7e40979aad5c",
+    "test_customer_ids_sha256": "2bcf6835ecfab669e9e7b2dd6b5b72c207a1efb4d4ea605b5f1d7048b24a1ea4"
+  },
+  "cv": {
+    "n_folds": 5,
+    "random_state": 42,
+    "stratification": "future_revenue > 0"
+  },
+  "features": [
+    "recency_days",
+    "frequency",
+    "monetary",
+    "avg_basket_value",
+    "unique_products",
+    "tenure_days",
+    "purchase_rate",
+    "country"
+  ],
+  "numeric_features": [
+    "recency_days",
+    "frequency",
+    "monetary",
+    "avg_basket_value",
+    "unique_products",
+    "tenure_days",
+    "purchase_rate"
+  ],
+  "categorical_features": [
+    "country"
+  ],
+  "target": "log1p_future_revenue",
+  "target_transformation": "log1p",
+  "inverse_transformation": "expm1, without clipping or smearing correction",
+  "prediction_cutoff": "2011-09-01",
+  "prediction_horizon": "Approximately four months; available post-cutoff transactions",
+  "preprocessing": {
+    "numeric": "StandardScaler",
+    "categorical": "OneHotEncoder(handle_unknown='ignore', sparse_output=False)",
+    "remainder": "drop"
+  },
+  "post_selection_policy": "Refit selected pipeline on all customer rows after holdout evaluation",
+  "sklearn_version": "1.9.1",
+  "model_type": "ridge",
+  "estimator_class": "Ridge",
+  "hyperparameters": {
+    "alpha": 10.0,
+    "copy_X": true,
+    "fit_intercept": true,
+    "max_iter": null,
+    "positive": false,
+    "random_state": null,
+    "solver": "auto",
+    "tol": 0.0001
+  },
+  "selection_cv_rmse_log": 1.7252608564270908,
+  "cv_metrics": {
+    "model_name": "ridge",
+    "hyperparameters": {
+      "alpha": 10.0,
+      "copy_X": true,
+      "fit_intercept": true,
+      "max_iter": null,
+      "positive": false,
+      "random_state": null,
+      "solver": "auto",
+      "tol": 0.0001
+    },
+    "n_folds": 5,
+    "mean_cv_mae_log": 1.399844,
+    "std_cv_mae_log": 0.052029,
+    "mean_cv_rmse_log": 1.725261,
+    "std_cv_rmse_log": 0.070007,
+    "mean_cv_r2_log": 0.251098,
+    "std_cv_r2_log": 0.051559
+  },
+  "training_timestamp": "2026-10-10T18:41:57.539071+00:00",
+  "n_training_customers": 4374,
+  "training_summary": {
+    "n_customers": 4374,
+    "numeric_features": [
+      "recency_days",
+      "frequency",
+      "monetary",
+      "avg_basket_value",
+      "unique_products",
+      "tenure_days",
+      "purchase_rate"
+    ],
+    "categorical_features": [
+      "country"
+    ],
+    "target_col": "log1p_future_revenue",
+    "estimator": "Ridge",
+    "hyperparameters": {
+      "alpha": 10.0,
+      "fit_intercept": true
+    },
+    "alpha": 10.0,
+    "y_mean": 1.3717811312978467,
+    "y_std": 1.9911310118401289
+  },
+  "final_test_metrics": {
+    "n_test_customers": 875,
+    "rmse_log": 1.690147,
+    "mae_log": 1.3634,
+    "r2_log": 0.266016,
+    "rmse_gbp": 52996.15,
+    "mae_gbp": 2570.97,
+    "median_ae_gbp": 3.45
+  },
+  "test_metric_scope": "Held-out customers, training-partition-fitted pipelines; not full-data refits",
+  "selection_sha256": "fe2d8edcffe8cb18fb387c9ee9849a6fed8d8476747113533fe165b16e6e1dea",
+  "model_sha256": "09bb0f2dd8d71ac486dadc90b3cec7c6b17002ccf7ab51599f77dee90cede7b7",
+  "model_path": "customer_value_model.joblib",
+  "input_schema": {
+    "recency_days": "finite real number (integer or float)",
+    "frequency": "finite real number (integer or float)",
+    "monetary": "finite real number (integer or float)",
+    "avg_basket_value": "finite real number (integer or float)",
+    "unique_products": "finite real number (integer or float)",
+    "tenure_days": "finite real number (integer or float)",
+    "purchase_rate": "finite real number (integer or float)",
+    "country": "non-empty string"
+  },
+  "output_schema": {
+    "pred_log1p_future_revenue": "raw log1p-scale prediction",
+    "pred_future_revenue": "expm1 prediction in GBP; not a calibrated expected value"
+  },
+  "versions": {
+    "sklearn": "1.9.1",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "joblib": "1.6.0"
+  }
+}

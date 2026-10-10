@@ -1,0 +1,28 @@
+{
+  "model": "ridge",
+  "segments": {
+    "zero": {
+      "n_customers": 566,
+      "mae_gbp": 2.761782205623178,
+      "mean_actual_gbp": 0.0,
+      "mean_predicted_gbp": 2.7411157376467457
+    },
+    "positive": {
+      "n_customers": 309,
+      "mae_gbp": 7275.185233025461,
+      "mean_actual_gbp": 161.8025566343042,
+      "mean_predicted_gbp": 7191.897562180727
+    },
+    "over_1000_gbp": {
+      "n_customers": 9,
+      "mae_gbp": 247742.26054950582,
+      "mean_actual_gbp": 3294.6744444444444,
+      "mean_predicted_gbp": 246568.8531812271
+    }
+  },
+  "negative_predictions": 50,
+  "mean_actual_gbp": 57.13941714285715,
+  "mean_predicted_gbp": 2541.5403636815463,
+  "largest_absolute_error_gbp": 1195100.6948878253,
+  "note": "Diagnostic only; does not alter selection, target, or inverse transform."
+}

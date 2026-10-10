@@ -8,6 +8,14 @@
 
 ## A. What was done
 
+The completed, authoritative experiment is now recorded in
+[`reports/metrics/final_experiment/`](../reports/metrics/final_experiment/).
+It uses the source pipeline's binary-stratified split and training-only CV RMSE
+to lock configurations and select Ridge (`alpha=10.0`) before test evaluation.
+The unexecuted notebook 08 uses a different split and test-based selection;
+it is not the source of the packaged model. See the [README](../README.md)
+for the supported experiment, packaging, and inference commands.
+
 Added Lasso and ElasticNet as first-class estimators alongside the existing OLS and Ridge models.
 All four models now:
 - Share a common `create_model(name, **hyperparams)` factory
@@ -110,19 +118,21 @@ The GridSearch in Notebook 08 sweeps `alpha ∈ [0.001, 0.5]` and
 `l1_ratio ∈ [0.1, 0.3, 0.5, 0.7, 0.9]`.
 
 ### F4. Refit on full dataset
-After evaluating on the held-out test set, each model is refit on the **full**
-`customer_dataset.csv` before being saved to `models/`. This is correct because:
-1. The test-set evaluation already tells us generalisation performance.
-2. More data always produces a better final model than training on 80%.
+After evaluating the locked configurations on the held-out test set, the selected
+pipeline is refit on the **full** `customer_dataset.csv` for the prototype artifact.
+The recorded test metrics belong to the training-partition-fitted pipeline, not
+the full-data refit. More training data does not guarantee better performance;
+the refit no longer has an independent holdout within this dataset.
 
 ### F5. log1p retransformation
 The target is `log1p_future_revenue`. Predictions are returned in both spaces:
 - `pred_log1p_future_revenue` — model output (log-space)
 - `pred_future_revenue = expm1(pred_log1p_future_revenue)` — £ estimate
 
-For fleet-level revenue forecasting, a **smearing correction factor**
-`exp(σ²/2)` should be applied to `pred_future_revenue` to correct for
-Jensen's inequality retransformation bias.
+The packaged output applies only `expm1`; no correction or clipping is added.
+It is not a calibrated conditional mean in GBP. A lognormal correction such as
+`exp(σ²/2)` requires assumptions that have not been established here; any future
+bias correction needs separate temporal validation rather than automatic use.
 
 ---
 
@@ -211,10 +221,6 @@ Breakdown:
 
 ## L. Next steps (Step 9 onwards)
 
-1. Run Notebook 07 to explore alpha grids and coefficient paths
-2. Run Notebook 08 to execute GridSearchCV and final test-set evaluation
-3. Run Notebook 09 to diagnose residuals and document limitations
-4. Optionally: hyperparameter tuning with RidgeCV / LassoCV for more
-   efficient alpha selection without manual grid search
-5. Consider: two-stage model (classify churn → predict revenue for non-churned)
-   to address the zero-inflation in `future_revenue`
+The experiment is locked; do not rerun notebook searches or reselect a model
+from test metrics to use the packaged artifact. See the
+[model card](../reports/model_card.md) for diagnostics and future research needs.

@@ -1,0 +1,43 @@
+{
+  "selection_sha256": "fe2d8edcffe8cb18fb387c9ee9849a6fed8d8476747113533fe165b16e6e1dea",
+  "evaluated_at": "2026-10-10T18:40:42.385874+00:00",
+  "models": {
+    "linear": {
+      "n_test_customers": 875,
+      "rmse_log": 1.697233,
+      "mae_log": 1.36562,
+      "r2_log": 0.259848,
+      "rmse_gbp": 74634.82,
+      "mae_gbp": 2737.28,
+      "median_ae_gbp": 3.4
+    },
+    "ridge": {
+      "n_test_customers": 875,
+      "rmse_log": 1.690147,
+      "mae_log": 1.3634,
+      "r2_log": 0.266016,
+      "rmse_gbp": 52996.15,
+      "mae_gbp": 2570.97,
+      "median_ae_gbp": 3.45
+    },
+    "lasso": {
+      "n_test_customers": 875,
+      "rmse_log": 1.682392,
+      "mae_log": 1.377606,
+      "r2_log": 0.272736,
+      "rmse_gbp": 20353.49,
+      "mae_gbp": 994.88,
+      "median_ae_gbp": 3.52
+    },
+    "elasticnet": {
+      "n_test_customers": 875,
+      "rmse_log": 1.682621,
+      "mae_log": 1.388535,
+      "r2_log": 0.272538,
+      "rmse_gbp": 11112.11,
+      "mae_gbp": 556.38,
+      "median_ae_gbp": 3.52
+    }
+  },
+  "scope": "Held-out customers, training-partition-fitted pipelines; not full-data refits"
+}

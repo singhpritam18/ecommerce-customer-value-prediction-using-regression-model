@@ -29,13 +29,12 @@ save_cv_results      : persist the summary DataFrame to reports/metrics/cv_resul
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
 import numpy as np
 import pandas as pd
-from loguru import logger
 from sklearn.metrics import make_scorer, mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GridSearchCV, KFold, StratifiedKFold, cross_validate
 
@@ -75,25 +74,22 @@ PARAM_GRIDS: dict[str, dict[str, list]] = {
     # An empty grid causes GridSearchCV to evaluate a single candidate
     # (the untuned model), which equals a plain CV run.
     "linear": {},
-
     # Ridge: search alpha over a broad log scale.
     # 10^-4 → 10^4 covers everything from nearly-OLS to very strong shrinkage.
     "ridge": {
         "regressor__alpha": [1e-4, 1e-3, 1e-2, 0.1, 1.0, 10.0, 100.0, 1000.0, 10_000.0],
     },
-
     # Lasso: coordinate-descent solver; restrict grid to moderate alphas.
     # Very large alpha (>10) zeros all coefficients on this dataset.
     # Very small alpha (<1e-5) behaves like OLS and may not converge.
     "lasso": {
         "regressor__alpha": [1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.05, 0.1, 0.5, 1.0],
     },
-
     # ElasticNet: search alpha AND l1_ratio.
     # l1_ratio=0 → pure Ridge; l1_ratio=1 → pure Lasso.
     # We exclude exact endpoints to avoid duplicating Ridge and Lasso experiments.
     "elasticnet": {
-        "regressor__alpha":    [1e-4, 1e-3, 0.01, 0.1, 1.0],
+        "regressor__alpha": [1e-4, 1e-3, 0.01, 0.1, 1.0],
         "regressor__l1_ratio": [0.1, 0.25, 0.5, 0.75, 0.9],
     },
 }
@@ -110,9 +106,9 @@ def _rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 SCORERS: dict[str, Any] = {
-    "mae_log":  make_scorer(mean_absolute_error),
+    "mae_log": make_scorer(mean_absolute_error),
     "rmse_log": make_scorer(_rmse),
-    "r2_log":   make_scorer(r2_score),
+    "r2_log": make_scorer(r2_score),
 }
 
 # ---------------------------------------------------------------------------
@@ -210,27 +206,26 @@ def run_cv(
 
     cv = make_cv_folds(y_binary=y_binary, n_splits=n_splits, random_state=random_state)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # suppress ConvergenceWarning on small folds
-        scores = cross_validate(
-            pipeline,
-            X_train,
-            y_train if y_binary is None else y_train,
-            cv=cv if y_binary is None else list(cv.split(X_train, y_binary)),
-            scoring=SCORERS,
-        )
+    scores = cross_validate(
+        pipeline,
+        X_train,
+        y_train,
+        cv=cv if y_binary is None else list(cv.split(X_train, y_binary)),
+        scoring=SCORERS,
+        error_score="raise",
+    )
 
     result = {
         "model_name": model_name,
         "hyperparameters": hparams,
         "n_folds": n_splits,
         # All metrics are on log1p_future_revenue
-        "mean_cv_mae_log":  round(float(scores["test_mae_log"].mean()),  6),
-        "std_cv_mae_log":   round(float(scores["test_mae_log"].std()),   6),
+        "mean_cv_mae_log": round(float(scores["test_mae_log"].mean()), 6),
+        "std_cv_mae_log": round(float(scores["test_mae_log"].std()), 6),
         "mean_cv_rmse_log": round(float(scores["test_rmse_log"].mean()), 6),
-        "std_cv_rmse_log":  round(float(scores["test_rmse_log"].std()),  6),
-        "mean_cv_r2_log":   round(float(scores["test_r2_log"].mean()),   6),
-        "std_cv_r2_log":    round(float(scores["test_r2_log"].std()),    6),
+        "std_cv_rmse_log": round(float(scores["test_rmse_log"].std()), 6),
+        "mean_cv_r2_log": round(float(scores["test_r2_log"].mean()), 6),
+        "std_cv_r2_log": round(float(scores["test_r2_log"].std()), 6),
     }
 
     logger.info(
@@ -255,6 +250,7 @@ def run_grid_search(
     random_state: int = RANDOM_STATE,
     use_stratified: bool = True,
     verbose: int = 0,
+    n_jobs: int = 1,
 ) -> tuple[GridSearchCV, pd.DataFrame]:
     """
     Run GridSearchCV for a named model on the training set only.
@@ -288,6 +284,8 @@ def run_grid_search(
     random_state : int
     use_stratified : bool
     verbose : int
+    n_jobs : int
+        Parallel workers; defaults to one to bound resource use.
 
     Returns
     -------
@@ -322,17 +320,15 @@ def run_grid_search(
     gs = GridSearchCV(
         estimator=base_pipeline,
         param_grid=grid,
-        scoring=PRIMARY_METRIC,   # used to select best_params_
+        scoring=PRIMARY_METRIC,  # used to select best_params_
         cv=cv_obj,
-        refit=True,               # refit best estimator on full training set
-        n_jobs=-1,
+        refit=True,  # refit best estimator on full training set
+        n_jobs=n_jobs,
         verbose=verbose,
         error_score="raise",
     )
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        gs.fit(X_train, y_train)
+    gs.fit(X_train, y_train)
 
     logger.success(
         f"[run_grid_search] {model_name} | "
@@ -348,12 +344,12 @@ def run_grid_search(
         p = cv_results["params"][i]
         row = {
             "model": model_name,
-            "alpha":     p.get("regressor__alpha",    None),
-            "l1_ratio":  p.get("regressor__l1_ratio", None),
+            "alpha": p.get("regressor__alpha", None),
+            "l1_ratio": p.get("regressor__l1_ratio", None),
             # mean_test_score for neg_root_mean_squared_error is negative
             "mean_cv_rmse_log": round(-float(cv_results["mean_test_score"][i]), 6),
-            "std_cv_rmse_log":  round(float(cv_results["std_test_score"][i]),   6),
-            "rank":             int(cv_results["rank_test_score"][i]),
+            "std_cv_rmse_log": round(float(cv_results["std_test_score"][i]), 6),
+            "rank": int(cv_results["rank_test_score"][i]),
         }
         rows.append(row)
 
@@ -402,13 +398,14 @@ def run_all_cv(
         if model_name == "linear" or not tune:
             # Plain CV — no grid search
             default_hparams: dict = {
-                "ridge":       {"alpha": 1.0},
-                "lasso":       {"alpha": 0.01},
-                "elasticnet":  {"alpha": 0.1, "l1_ratio": 0.5},
+                "ridge": {"alpha": 1.0},
+                "lasso": {"alpha": 0.01},
+                "elasticnet": {"alpha": 0.1, "l1_ratio": 0.5},
             }.get(model_name, {})
 
             cv_result = run_cv(
-                model_name, train_df,
+                model_name,
+                train_df,
                 hyperparameters=default_hparams,
                 n_splits=n_splits,
                 random_state=random_state,
@@ -416,40 +413,43 @@ def run_all_cv(
             )
             hparams = cv_result["hyperparameters"]
             row = {
-                "model":           model_name,
-                "alpha":           hparams.get("alpha",    None),
-                "l1_ratio":        hparams.get("l1_ratio", None),
-                "mean_cv_mae_log":  cv_result["mean_cv_mae_log"],
-                "std_cv_mae_log":   cv_result["std_cv_mae_log"],
+                "model": model_name,
+                "alpha": hparams.get("alpha", None),
+                "l1_ratio": hparams.get("l1_ratio", None),
+                "mean_cv_mae_log": cv_result["mean_cv_mae_log"],
+                "std_cv_mae_log": cv_result["std_cv_mae_log"],
                 "mean_cv_rmse_log": cv_result["mean_cv_rmse_log"],
-                "std_cv_rmse_log":  cv_result["std_cv_rmse_log"],
-                "mean_cv_r2_log":   cv_result["mean_cv_r2_log"],
-                "std_cv_r2_log":    cv_result["std_cv_r2_log"],
-                "rank":             None,
+                "std_cv_rmse_log": cv_result["std_cv_rmse_log"],
+                "mean_cv_r2_log": cv_result["mean_cv_r2_log"],
+                "std_cv_r2_log": cv_result["std_cv_r2_log"],
+                "rank": None,
             }
             all_rows.append(row)
 
         else:
             # GridSearchCV for regularised models
             _, results_df = run_grid_search(
-                model_name, train_df,
+                model_name,
+                train_df,
                 n_splits=n_splits,
                 random_state=random_state,
                 use_stratified=use_stratified,
             )
             for _, r in results_df.iterrows():
-                all_rows.append({
-                    "model":            model_name,
-                    "alpha":            r.get("alpha"),
-                    "l1_ratio":         r.get("l1_ratio"),
-                    "mean_cv_mae_log":  None,   # not collected in grid search by default
-                    "std_cv_mae_log":   None,
-                    "mean_cv_rmse_log": r["mean_cv_rmse_log"],
-                    "std_cv_rmse_log":  r["std_cv_rmse_log"],
-                    "mean_cv_r2_log":   None,
-                    "std_cv_r2_log":    None,
-                    "rank":             r["rank"],
-                })
+                all_rows.append(
+                    {
+                        "model": model_name,
+                        "alpha": r.get("alpha"),
+                        "l1_ratio": r.get("l1_ratio"),
+                        "mean_cv_mae_log": None,  # not collected in grid search by default
+                        "std_cv_mae_log": None,
+                        "mean_cv_rmse_log": r["mean_cv_rmse_log"],
+                        "std_cv_rmse_log": r["std_cv_rmse_log"],
+                        "mean_cv_r2_log": None,
+                        "std_cv_r2_log": None,
+                        "rank": r["rank"],
+                    }
+                )
 
     df = pd.DataFrame(all_rows)
     logger.success(f"[run_all_cv] Completed. {len(df)} rows. tune={tune}")
