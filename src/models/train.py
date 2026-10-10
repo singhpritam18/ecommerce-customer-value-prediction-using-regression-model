@@ -24,18 +24,24 @@ Preprocessing applied
 ----------------------
 Numeric features   : StandardScaler (essential for fair regularisation comparison).
 Categorical feature: OneHotEncoder (country).
+
+Model factory
+-------------
+Use ``create_model(model_name, **hyperparameters)`` to obtain an sklearn estimator
+by name.  Supported names: "linear", "ridge", "lasso", "elasticnet".
 """
 
 import json
 import pickle
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from loguru import logger
 from sklearn.base import BaseEstimator
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import ElasticNet, Lasso, LinearRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -59,13 +65,97 @@ CATEGORICAL_FEATURES: list[str] = ["country"]
 
 TARGET_COL: str = "log1p_future_revenue"
 
-# Default serialisation paths (Ridge kept for backward compatibility)
+# ---------------------------------------------------------------------------
+# Serialisation paths
+# ---------------------------------------------------------------------------
+
+# Generic / default path (kept for backward compatibility)
 MODEL_PATH: Path = MODELS_DIR / "ridge_pipeline.pkl"
 METADATA_PATH: Path = MODELS_DIR / "ridge_pipeline_metadata.json"
 
-# OLS baseline paths
+# Per-model paths
 OLS_MODEL_PATH: Path = MODELS_DIR / "ols_pipeline.pkl"
 OLS_METADATA_PATH: Path = MODELS_DIR / "ols_pipeline_metadata.json"
+
+RIDGE_MODEL_PATH: Path = MODELS_DIR / "ridge_pipeline.pkl"
+RIDGE_METADATA_PATH: Path = MODELS_DIR / "ridge_pipeline_metadata.json"
+
+LASSO_MODEL_PATH: Path = MODELS_DIR / "lasso_pipeline.pkl"
+LASSO_METADATA_PATH: Path = MODELS_DIR / "lasso_pipeline_metadata.json"
+
+ELASTICNET_MODEL_PATH: Path = MODELS_DIR / "elasticnet_pipeline.pkl"
+ELASTICNET_METADATA_PATH: Path = MODELS_DIR / "elasticnet_pipeline_metadata.json"
+
+FINAL_MODEL_PATH: Path = MODELS_DIR / "customer_value_model.pkl"
+FINAL_METADATA_PATH: Path = MODELS_DIR / "customer_value_model_metadata.json"
+
+# Mapping from model name → (model_path, metadata_path)
+MODEL_PATHS: dict[str, tuple[Path, Path]] = {
+    "linear": (OLS_MODEL_PATH, OLS_METADATA_PATH),
+    "ridge": (RIDGE_MODEL_PATH, RIDGE_METADATA_PATH),
+    "lasso": (LASSO_MODEL_PATH, LASSO_METADATA_PATH),
+    "elasticnet": (ELASTICNET_MODEL_PATH, ELASTICNET_METADATA_PATH),
+}
+
+
+# ---------------------------------------------------------------------------
+# Model factory
+# ---------------------------------------------------------------------------
+
+SUPPORTED_MODELS = ("linear", "ridge", "lasso", "elasticnet")
+
+
+def create_model(model_name: str, **hyperparameters: Any) -> BaseEstimator:
+    """
+    Instantiate an sklearn regression estimator by name.
+
+    Parameters
+    ----------
+    model_name : str
+        One of "linear", "ridge", "lasso", "elasticnet" (case-insensitive).
+    **hyperparameters
+        Keyword arguments forwarded to the estimator constructor.
+        Common parameters:
+          - ridge:      alpha (default 1.0)
+          - lasso:      alpha (default 1.0), max_iter (default 10_000)
+          - elasticnet: alpha (default 1.0), l1_ratio (default 0.5),
+                        max_iter (default 10_000)
+          - linear:     fit_intercept (default True)
+
+    Returns
+    -------
+    sklearn estimator (not fitted)
+
+    Examples
+    --------
+    >>> create_model("ridge", alpha=0.1)
+    Ridge(alpha=0.1)
+    >>> create_model("lasso", alpha=0.01, max_iter=5000)
+    Lasso(alpha=0.01, max_iter=5000)
+    >>> create_model("elasticnet", alpha=0.1, l1_ratio=0.5)
+    ElasticNet(alpha=0.1, l1_ratio=0.5)
+    >>> create_model("linear")
+    LinearRegression()
+    """
+    name = model_name.lower().strip()
+    if name not in SUPPORTED_MODELS:
+        raise ValueError(
+            f"Unknown model_name '{model_name}'. "
+            f"Supported: {SUPPORTED_MODELS}"
+        )
+
+    # Lasso and ElasticNet use coordinate descent; needs more iterations for
+    # convergence on standardised data.  Use 10_000 as a safe default.
+    if name == "ridge":
+        return Ridge(**hyperparameters)
+    if name == "lasso":
+        hyperparameters.setdefault("max_iter", 10_000)
+        return Lasso(**hyperparameters)
+    if name == "elasticnet":
+        hyperparameters.setdefault("max_iter", 10_000)
+        return ElasticNet(**hyperparameters)
+    # "linear"
+    return LinearRegression(**hyperparameters)
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +226,8 @@ def train(
         Must contain all NUMERIC_FEATURES, CATEGORICAL_FEATURES, and TARGET_COL.
     estimator : sklearn estimator or None
         Regression model to use.  Defaults to ``Ridge(alpha=alpha)`` when ``None``.
-        Pass ``LinearRegression()`` for the unregularised OLS baseline.
+        Pass ``LinearRegression()`` for the unregularised OLS baseline, or use
+        ``create_model("lasso", alpha=0.01)`` etc.
     alpha : float
         Ridge regularisation strength (ignored when ``estimator`` is provided).
     random_state : int
@@ -158,20 +249,34 @@ def train(
     pipeline = build_pipeline(estimator=estimator, alpha=alpha)
     pipeline.fit(X, y)
 
-    estimator_name = type(pipeline.named_steps["regressor"]).__name__
+    estimator_obj = pipeline.named_steps["regressor"]
+    estimator_name = type(estimator_obj).__name__
+
+    # Collect hyperparameters that are meaningful for serialisation
+    hparams: dict[str, Any] = {}
+    if hasattr(estimator_obj, "alpha"):
+        hparams["alpha"] = float(estimator_obj.alpha)
+    if hasattr(estimator_obj, "l1_ratio"):
+        hparams["l1_ratio"] = float(estimator_obj.l1_ratio)
+    if hasattr(estimator_obj, "fit_intercept"):
+        hparams["fit_intercept"] = bool(estimator_obj.fit_intercept)
+
     metadata = {
         "n_customers": int(len(customer_df)),
         "numeric_features": NUMERIC_FEATURES,
         "categorical_features": CATEGORICAL_FEATURES,
         "target_col": TARGET_COL,
         "estimator": estimator_name,
-        "alpha": alpha if estimator is None else None,
+        "hyperparameters": hparams,
+        # legacy key kept for backward compatibility
+        "alpha": alpha if estimator is None else hparams.get("alpha"),
         "y_mean": float(y.mean()),
         "y_std": float(y.std()),
     }
 
     logger.success(
-        f"[train] Fitted {estimator_name} pipeline on {len(customer_df):,} customers."
+        f"[train] Fitted {estimator_name} pipeline on {len(customer_df):,} customers "
+        f"| hyperparams={hparams}"
     )
     return pipeline, metadata
 

@@ -1,7 +1,16 @@
 """
 tests/test_models.py — Unit tests for the models sub-package.
 
-Tests cover training, evaluation, prediction, and save/load consistency.
+Tests cover:
+- model factory (create_model)
+- build_pipeline / build_pipeline with all four estimators
+- train() with all four estimators
+- save_model / load_model round-trip
+- evaluate()
+- predict()
+- metadata keys and content
+- input validation
+
 All tests use synthetic in-memory data; no real dataset is required.
 """
 
@@ -13,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.linear_model import ElasticNet, Lasso, LinearRegression, Ridge
 from sklearn.pipeline import Pipeline
 
 from ecommerce_customer_value_prediction.features.build_features import (
@@ -24,8 +34,10 @@ from ecommerce_customer_value_prediction.models.predict import predict
 from ecommerce_customer_value_prediction.models.train import (
     CATEGORICAL_FEATURES,
     NUMERIC_FEATURES,
+    SUPPORTED_MODELS,
     TARGET_COL,
     build_pipeline,
+    create_model,
     load_model,
     save_model,
     train,
@@ -62,6 +74,73 @@ def _make_customer_df(n: int = 50, seed: int = 42) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Tests: create_model
+# ---------------------------------------------------------------------------
+
+
+def test_create_model_linear_returns_linear_regression():
+    m = create_model("linear")
+    assert isinstance(m, LinearRegression)
+
+
+def test_create_model_ridge_returns_ridge():
+    m = create_model("ridge")
+    assert isinstance(m, Ridge)
+
+
+def test_create_model_ridge_alpha():
+    m = create_model("ridge", alpha=10.0)
+    assert m.alpha == 10.0
+
+
+def test_create_model_lasso_returns_lasso():
+    m = create_model("lasso")
+    assert isinstance(m, Lasso)
+
+
+def test_create_model_lasso_alpha():
+    m = create_model("lasso", alpha=0.05)
+    assert m.alpha == 0.05
+
+
+def test_create_model_lasso_default_max_iter():
+    m = create_model("lasso")
+    assert m.max_iter == 10_000
+
+
+def test_create_model_elasticnet_returns_elasticnet():
+    m = create_model("elasticnet")
+    assert isinstance(m, ElasticNet)
+
+
+def test_create_model_elasticnet_hyperparams():
+    m = create_model("elasticnet", alpha=0.2, l1_ratio=0.7)
+    assert m.alpha == 0.2
+    assert m.l1_ratio == 0.7
+
+
+def test_create_model_elasticnet_default_max_iter():
+    m = create_model("elasticnet")
+    assert m.max_iter == 10_000
+
+
+def test_create_model_case_insensitive():
+    assert isinstance(create_model("RIDGE"), Ridge)
+    assert isinstance(create_model("Linear"), LinearRegression)
+    assert isinstance(create_model("LASSO"), Lasso)
+    assert isinstance(create_model("ElasticNet"), ElasticNet)
+
+
+def test_create_model_raises_on_unknown():
+    with pytest.raises(ValueError, match="Unknown model_name"):
+        create_model("xgboost")
+
+
+def test_supported_models_contains_all_four():
+    assert set(SUPPORTED_MODELS) == {"linear", "ridge", "lasso", "elasticnet"}
+
+
+# ---------------------------------------------------------------------------
 # Tests: build_pipeline
 # ---------------------------------------------------------------------------
 
@@ -78,9 +157,57 @@ def test_build_pipeline_has_preprocessor_and_regressor():
     assert "regressor" in step_names
 
 
+def test_build_pipeline_default_is_ridge():
+    pipeline = build_pipeline()
+    assert isinstance(pipeline.named_steps["regressor"], Ridge)
+
+
+def test_build_pipeline_with_linear():
+    pipeline = build_pipeline(estimator=LinearRegression())
+    assert isinstance(pipeline.named_steps["regressor"], LinearRegression)
+
+
+def test_build_pipeline_with_lasso():
+    pipeline = build_pipeline(estimator=Lasso(alpha=0.1))
+    assert isinstance(pipeline.named_steps["regressor"], Lasso)
+
+
+def test_build_pipeline_with_elasticnet():
+    pipeline = build_pipeline(estimator=ElasticNet(alpha=0.1, l1_ratio=0.5))
+    assert isinstance(pipeline.named_steps["regressor"], ElasticNet)
+
+
 # ---------------------------------------------------------------------------
-# Tests: train
+# Tests: train — all four estimators
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("model_name", SUPPORTED_MODELS)
+def test_train_all_models_return_pipeline_and_metadata(model_name):
+    df = _make_customer_df()
+    estimator = create_model(model_name)
+    pipeline, metadata = train(df, estimator=estimator)
+    assert isinstance(pipeline, Pipeline)
+    assert isinstance(metadata, dict)
+
+
+@pytest.mark.parametrize("model_name", SUPPORTED_MODELS)
+def test_train_all_models_metadata_keys(model_name):
+    df = _make_customer_df()
+    estimator = create_model(model_name)
+    _, metadata = train(df, estimator=estimator)
+    for key in ("n_customers", "numeric_features", "categorical_features", "target_col", "estimator", "hyperparameters"):
+        assert key in metadata, f"Key '{key}' missing from metadata for {model_name}"
+
+
+@pytest.mark.parametrize("model_name", SUPPORTED_MODELS)
+def test_train_all_models_can_predict(model_name):
+    df = _make_customer_df()
+    estimator = create_model(model_name)
+    pipeline, _ = train(df, estimator=estimator)
+    X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
+    preds = pipeline.predict(X)
+    assert len(preds) == len(df)
 
 
 def test_train_returns_fitted_pipeline_and_metadata():
@@ -88,13 +215,6 @@ def test_train_returns_fitted_pipeline_and_metadata():
     pipeline, metadata = train(df)
     assert isinstance(pipeline, Pipeline)
     assert isinstance(metadata, dict)
-
-
-def test_train_metadata_keys():
-    df = _make_customer_df()
-    _, metadata = train(df)
-    for key in ("n_customers", "numeric_features", "categorical_features", "target_col", "alpha"):
-        assert key in metadata
 
 
 def test_train_metadata_n_customers():
@@ -115,6 +235,27 @@ def test_train_pipeline_can_predict():
     X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
     preds = pipeline.predict(X)
     assert len(preds) == len(df)
+
+
+def test_train_lasso_hyperparams_recorded():
+    df = _make_customer_df()
+    _, metadata = train(df, estimator=create_model("lasso", alpha=0.05))
+    assert metadata["estimator"] == "Lasso"
+    assert metadata["hyperparameters"]["alpha"] == 0.05
+
+
+def test_train_elasticnet_hyperparams_recorded():
+    df = _make_customer_df()
+    _, metadata = train(df, estimator=create_model("elasticnet", alpha=0.1, l1_ratio=0.7))
+    assert metadata["estimator"] == "ElasticNet"
+    assert metadata["hyperparameters"]["alpha"] == 0.1
+    assert metadata["hyperparameters"]["l1_ratio"] == 0.7
+
+
+def test_train_linear_metadata_estimator_name():
+    df = _make_customer_df()
+    _, metadata = train(df, estimator=LinearRegression())
+    assert metadata["estimator"] == "LinearRegression"
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +302,23 @@ def test_save_model_metadata_json_valid():
 def test_load_model_raises_if_not_found():
     with pytest.raises(FileNotFoundError):
         load_model(Path("nonexistent_model.pkl"))
+
+
+@pytest.mark.parametrize("model_name", SUPPORTED_MODELS)
+def test_save_load_roundtrip_all_models(model_name):
+    df = _make_customer_df()
+    estimator = create_model(model_name)
+    pipeline, metadata = train(df, estimator=estimator)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        model_path = Path(tmpdir) / f"{model_name}.pkl"
+        metadata_path = Path(tmpdir) / f"{model_name}_meta.json"
+        save_model(pipeline, metadata, model_path=model_path, metadata_path=metadata_path)
+        loaded = load_model(model_path)
+        X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
+        np.testing.assert_array_almost_equal(
+            pipeline.predict(X), loaded.predict(X)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +372,19 @@ def test_evaluate_raises_on_missing_column():
         evaluate(pipeline, df.drop(columns=["recency_days"]))
 
 
+@pytest.mark.parametrize("model_name", SUPPORTED_MODELS)
+def test_evaluate_all_models(model_name):
+    """Each of the four estimators should produce valid metrics."""
+    df = _make_customer_df(n=60)
+    estimator = create_model(model_name)
+    pipeline, _ = train(df.iloc[:40], estimator=estimator)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        metrics = evaluate(pipeline, df.iloc[40:],
+                           metrics_path=Path(tmpdir) / "m.json", save=False)
+    assert "r2_log" in metrics
+    assert "mae_gbp" in metrics
+
+
 # ---------------------------------------------------------------------------
 # Tests: predict
 # ---------------------------------------------------------------------------
@@ -239,7 +410,6 @@ def test_predict_revenue_non_negative():
     df = _make_customer_df()
     pipeline, _ = train(df)
     result = predict(df, pipeline=pipeline)
-    # Predictions on training data with Ridge should be reasonable positive values
     assert result["pred_future_revenue"].median() > 0
 
 
@@ -248,3 +418,13 @@ def test_predict_raises_on_missing_feature():
     pipeline, _ = train(df)
     with pytest.raises(ValueError, match="recency_days"):
         predict(df.drop(columns=["recency_days"]), pipeline=pipeline)
+
+
+@pytest.mark.parametrize("model_name", SUPPORTED_MODELS)
+def test_predict_all_models(model_name):
+    df = _make_customer_df(n=30)
+    estimator = create_model(model_name)
+    pipeline, _ = train(df, estimator=estimator)
+    result = predict(df, pipeline=pipeline)
+    assert len(result) == 30
+    assert "pred_future_revenue" in result.columns

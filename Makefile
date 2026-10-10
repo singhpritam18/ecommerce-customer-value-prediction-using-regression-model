@@ -48,15 +48,44 @@ features:
 # MODELLING                                                                     #
 #################################################################################
 
-## Run full training pipeline: features → train/eval → models/ridge_pipeline.pkl
+## Train OLS Linear Regression baseline
+.PHONY: train-linear
+train-linear:
+	$(PYTHON) -m ecommerce_customer_value_prediction.pipelines.training_pipeline --model linear
+
+## Train Ridge regression (default alpha=1.0)
+.PHONY: train-ridge
+train-ridge:
+	$(PYTHON) -m ecommerce_customer_value_prediction.pipelines.training_pipeline --model ridge
+
+## Train Lasso regression (default alpha=0.01)
+.PHONY: train-lasso
+train-lasso:
+	$(PYTHON) -m ecommerce_customer_value_prediction.pipelines.training_pipeline --model lasso
+
+## Train ElasticNet regression (default alpha=0.1, l1_ratio=0.5)
+.PHONY: train-elasticnet
+train-elasticnet:
+	$(PYTHON) -m ecommerce_customer_value_prediction.pipelines.training_pipeline --model elasticnet
+
+## Train all four models on the same frozen split and generate model_comparison.csv
+.PHONY: compare-models
+compare-models:
+	$(PYTHON) -m ecommerce_customer_value_prediction.pipelines.training_pipeline --experiment all
+
+## Alias: run full training pipeline (Ridge, default)
 .PHONY: train
-train:
-	$(PYTHON) -m ecommerce_customer_value_prediction.pipelines.training_pipeline
+train: train-ridge
 
 ## Show evaluation metrics from the last training run
 .PHONY: metrics
 metrics:
 	$(PYTHON) -c "import json, pathlib; p=pathlib.Path('reports/metrics/evaluation_metrics.json'); print(json.dumps(json.loads(p.read_text()), indent=2)) if p.exists() else print('No metrics file found. Run: make train')"
+
+## Show model comparison table
+.PHONY: report
+report:
+	$(PYTHON) -c "import pandas as pd, pathlib; p=pathlib.Path('reports/metrics/model_comparison.csv'); print(pd.read_csv(p)[['model','cv_cv_r2','cv_cv_rmse_log','test_r2_log','test_rmse_log','test_mae_gbp']].to_string(index=False)) if p.exists() else print('No comparison found. Run: make compare-models')"
 
 #################################################################################
 # QUALITY                                                                       #
