@@ -1,49 +1,57 @@
 [build-system]
-requires = ["flit_core >=3.2,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "ecommerce_customer_value_prediction"
-version = "0.0.1"
-description = "A short description of the project."
+version = "0.1.0"
+description = "E-Commerce Customer Value Prediction using RFM features and Ridge regression."
 authors = [
-  { name = "Your name (or your organization/company/team)" },
+  { name = "Pritam Singh" },
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License"
+    "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
     "ipython",
     "jupyterlab",
     "loguru",
     "matplotlib",
-    "mkdocs",
     "notebook",
     "numpy",
+    "openpyxl",
     "pandas",
     "pip",
-    "pytest",
     "python-dotenv",
-    "ruff",
     "scikit-learn",
+    "seaborn",
     "tqdm",
     "typer",
 ]
-requires-python = "~=3.10.0"
+requires-python = ">=3.10"
 
+[project.scripts]
+clean-data  = "ecommerce_customer_value_prediction.data.clean_data:app"
+train       = "ecommerce_customer_value_prediction.pipelines.training_pipeline:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ecommerce_customer_value_prediction"]
+
+[tool.pytest.ini_options]
+testpaths  = ["tests"]
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 99
-src = ["ecommerce_customer_value_prediction"]
-include = ["pyproject.toml", "ecommerce_customer_value_prediction/**/*.py"]
+src = ["src"]
+include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py"]
 
 [tool.ruff.lint]
-extend-select = ["I"]  # Add import sorting
+extend-select = ["I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["ecommerce_customer_value_prediction"]
 force-sort-within-sections = true
-
