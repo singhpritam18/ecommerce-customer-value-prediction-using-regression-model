@@ -97,10 +97,39 @@ in GBP space; **that inspection does not change the CV-locked selection**.
 
 The authoritative [experiment outputs](reports/metrics/final_experiment/) contain
 the candidate grids, all locked hyperparameters, CV results, split/dataset
-fingerprints, test metrics, and error analysis. The older unexecuted notebooks
-are explanatory research material, not evidence of a completed experiment:
-notebook 08 uses a different split and test-based model selection. Do not run it
-to recreate or change this locked artifact.
+fingerprints, test metrics, and error analysis. The older unexecuted
+[08-model-selection-and-comparison.ipynb](notebooks/08-model-selection-and-comparison.ipynb)
+uses a different split and test-based model selection. Do not run it to recreate
+or change this locked artifact. Use the executed artifact-only lessons below to
+understand the completed experiment without fitting or tuning anything.
+
+## Educational notebooks: read the completed experiment
+
+Read these in order; each includes executed tables, plots, equations, and
+interpretation of the saved evidence:
+
+1. [06 - OLS baseline](notebooks/06-linear-regression-baseline.ipynb):
+   features/target, log1p, the frozen split, fold-local preprocessing, least
+   squares, metrics, saved OLS results, and training-feature correlations.
+2. [07 - Regularization analysis](notebooks/07-regularization-analysis.ipynb):
+   Ridge/Lasso/ElasticNet objectives, alpha and l1_ratio, actual CV curves and
+   heatmap, saved Ridge coefficients, and the small development-score changes.
+3. [08 - Final results and error analysis](notebooks/08-final-results-and-error-analysis.ipynb):
+   test-set discipline, final comparison, saved segment errors, the approximately
+   GBP 1.20 million maximum error, 50 negative predictions, and separate software
+   versus business-readiness judgments.
+
+Select the installed artifact runtime as the notebook kernel and run from the
+repository root or `notebooks/`. The lessons block estimator fitting and tuning,
+verify artifact checksums, and do not regenerate held-out predictions.
+Only the optional training-feature correlation section needs the local,
+hash-matched customer dataset; the artifact-based results need no raw workbook.
+
+The experiment did not save OLS/Lasso/ElasticNet coefficient vectors,
+coefficient paths, or row-level held-out predictions. The lessons explicitly
+identify the resulting gaps in sparsity curves, low/medium-value errors, and
+ranked error rows rather than inventing results or retraining. Displayed Ridge
+coefficients belong to the saved full-data refit, not the earlier holdout model.
 
 ## Final model and artifacts
 

@@ -12,9 +12,12 @@ The completed, authoritative experiment is now recorded in
 [`reports/metrics/final_experiment/`](../reports/metrics/final_experiment/).
 It uses the source pipeline's binary-stratified split and training-only CV RMSE
 to lock configurations and select Ridge (`alpha=10.0`) before test evaluation.
-The unexecuted notebook 08 uses a different split and test-based selection;
-it is not the source of the packaged model. See the [README](../README.md)
-for the supported experiment, packaging, and inference commands.
+The older unexecuted `08-model-selection-and-comparison.ipynb` uses a different
+split and test-based selection; it is not the source of the packaged model.
+The executed [regularization lesson](../notebooks/07-regularization-analysis.ipynb)
+and [final-results lesson](../notebooks/08-final-results-and-error-analysis.ipynb)
+read the completed artifacts without rerunning the experiment. See the
+[README](../README.md) for experiment, packaging, inference, and lesson guidance.
 
 Added Lasso and ElasticNet as first-class estimators alongside the existing OLS and Ridge models.
 All four models now:

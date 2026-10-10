@@ -83,8 +83,14 @@ not replacements for the package training entry point.
 - The authoritative completed experiment is in
   `reports/metrics/final_experiment/`: `selection.json` locks Ridge (`alpha=10.0`)
   using training CV RMSE before any test evaluation. Do not retune or reselect
-  from the test metrics. Notebook 08 is unexecuted and uses a different split
-  and selection policy; it is not the source of the packaged artifact.
+  from the test metrics. The older `08-model-selection-and-comparison.ipynb`
+  is unexecuted and uses a different split and selection policy; it is not the
+  source of the packaged artifact.
+- The executed educational notebooks are `06-linear-regression-baseline.ipynb`,
+  `07-regularization-analysis.ipynb`, and `08-final-results-and-error-analysis.ipynb`.
+  They read artifacts without fitting/tuning or regenerating test predictions.
+  Preserve their explicit evidence gaps: only full-data Ridge coefficients and
+  aggregate errors were saved, not alternative coefficients or row-level errors.
 - Consumer inference uses `models/customer_value_model.joblib` with
   `models/model_metadata.json` and `models/runtime-constraints.txt`.
   `python -m ecommerce_customer_value_prediction.pipelines.final_model package`
