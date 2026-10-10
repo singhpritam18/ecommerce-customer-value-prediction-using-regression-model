@@ -25,12 +25,11 @@ load_dotenv()
 # Root
 # ---------------------------------------------------------------------------
 
-# src/ecommerce_customer_value_prediction/config/settings.py
-#   → parents[0] = src/ecommerce_customer_value_prediction/config/
-#   → parents[1] = src/ecommerce_customer_value_prediction/
-#   → parents[2] = src/
-#   → parents[3] = project root
-PROJ_ROOT: Path = Path(__file__).resolve().parents[3]
+# src/config/settings.py
+#   → parents[0] = src/config/
+#   → parents[1] = src/
+#   → parents[2] = project root
+PROJ_ROOT: Path = Path(__file__).resolve().parents[2]
 logger.info(f"PROJ_ROOT: {PROJ_ROOT}")
 
 # ---------------------------------------------------------------------------

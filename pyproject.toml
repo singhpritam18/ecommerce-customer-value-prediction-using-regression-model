@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "ecommerce_customer_value_prediction"
@@ -37,12 +37,17 @@ requires-python = ">=3.10"
 clean-data  = "ecommerce_customer_value_prediction.data.clean_data:app"
 train       = "ecommerce_customer_value_prediction.pipelines.training_pipeline:app"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/ecommerce_customer_value_prediction"]
+[tool.setuptools]
+# Map the ecommerce_customer_value_prediction import name to the src/ directory
+package-dir = {"ecommerce_customer_value_prediction" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths  = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 99
