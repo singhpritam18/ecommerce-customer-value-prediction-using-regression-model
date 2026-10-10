@@ -4,7 +4,7 @@
 
 PROJECT_NAME   = ecommerce-customer-value-prediction
 PYTHON         = python
-SRC_PKG        = src/ecommerce_customer_value_prediction
+SRC_PKG        = src
 
 #################################################################################
 # ENVIRONMENT                                                                   #
