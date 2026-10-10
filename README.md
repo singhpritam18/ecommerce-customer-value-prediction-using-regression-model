@@ -8,45 +8,95 @@ Predict future 4-month gross revenue for each customer using RFM-style features 
 
 ```
 ecommerce-customer-value-prediction/
-├── data/
-│   ├── raw/                     ← IMMUTABLE source file (online_retail_II.xlsx)
-│   ├── interim/                 ← Cleaned transactions (transactions_cleaned.csv)
-│   └── processed/               ← Customer-level modelling dataset (customer_dataset.csv)
-├── models/                      ← Fitted pipeline (ridge_pipeline.pkl) + metadata JSON
-├── notebooks/
-│   ├── 01-initial-data-exploration.ipynb
-│   └── 02-data-cleaning.ipynb
+│
+├── data/                                  ← All data (never commit raw data to git)
+│   ├── raw/                               ← IMMUTABLE source files; downloaded once
+│   │   └── online_retail_II.xlsx          ← UCI Online Retail II dataset
+│   ├── interim/                           ← Cleaned transaction-level output
+│   │   └── transactions_cleaned.csv       ← Produced by `make clean-data`
+│   └── processed/                         ← Customer-level modelling dataset
+│       └── customer_dataset.csv           ← Produced by `make train` (feature + target)
+│
+├── models/                                ← Serialised model artifacts
+│   ├── ridge_pipeline.pkl                 ← Fitted sklearn Pipeline (pickle)
+│   └── ridge_pipeline_metadata.json       ← Training config & statistics
+│
+├── notebooks/                             ← Jupyter notebooks for exploration & reporting
+│   ├── 01-initial-data-exploration.ipynb  ← Schema, missing values, distributions, time range
+│   └── 02-data-cleaning.ipynb             ← Step-by-step cleaning with decision narrative
+│
 ├── reports/
-│   ├── figures/
-│   └── metrics/                 ← Evaluation metrics JSON
-├── src/
+│   ├── figures/                           ← Saved plots (EDA charts, residual plots, etc.)
+│   └── metrics/
+│       └── evaluation_metrics.json        ← Hold-out test metrics (R², RMSE, MAE in log+GBP)
+│
+├── src/                                   ← Installable Python package (`pip install -e .`)
 │   └── ecommerce_customer_value_prediction/
-│       ├── __init__.py
-│       ├── config/
-│       │   ├── __init__.py
-│       │   └── settings.py      ← All project paths (PROJ_ROOT, RAW_DATA_DIR, …)
-│       ├── data/
-│       │   ├── __init__.py
-│       │   ├── load_data.py     ← Load raw Excel workbook
-│       │   ├── clean_data.py    ← Transaction-level cleaning + pipeline
-│       │   └── validate_data.py ← Diagnostic reporters + hard constraints
-│       ├── features/
-│       │   ├── __init__.py
-│       │   └── build_features.py ← RFM features + future_revenue target
-│       ├── models/
-│       │   ├── __init__.py
-│       │   ├── train.py         ← Ridge pipeline: build, fit, save, load
-│       │   ├── evaluate.py      ← Evaluation metrics (log-space + GBP)
-│       │   └── predict.py       ← Inference: load model + generate predictions
-│       └── pipelines/
-│           ├── __init__.py
-│           └── training_pipeline.py ← End-to-end orchestration
-├── tests/
-│   ├── test_data.py             ← 27 tests for cleaning + validation
-│   ├── test_features.py         ← 16 tests for RFM feature engineering
-│   └── test_models.py           ← 18 tests for train/eval/predict/save-load
-├── pyproject.toml
-├── Makefile
+│       │
+│       ├── __init__.py                    ← Package version & top-level re-exports
+│       │
+│       ├── config/                        ← Centralised project configuration
+│       │   ├── __init__.py                ← Re-exports all path constants
+│       │   └── settings.py                ← PROJ_ROOT, *_DATA_DIR, MODELS_DIR, METRICS_DIR
+│       │
+│       ├── data/                          ← Raw → interim data pipeline
+│       │   ├── __init__.py                ← Re-exports run_cleaning_pipeline, validate_cleaned
+│       │   ├── load_data.py               ← load_raw_data(): reads Excel workbook → DataFrame
+│       │   ├── clean_data.py              ← run_cleaning_pipeline(): 6-step filtering + type coercion
+│       │   │                              │   • drop_missing_customer_id
+│       │   │                              │   • drop_full_duplicates
+│       │   │                              │   • keep_positive_qty_and_price
+│       │   │                              │   • drop_cancellation_invoices (C-prefix)
+│       │   │                              │   • drop_nonstandard_stockcodes (POST, DOT, …)
+│       │   │                              │   • enforce_dtypes + create_line_total
+│       │   └── validate_data.py           ← Two layers of validation:
+│       │                                  │   • Diagnostic reporters (used by notebooks)
+│       │                                  │   • validate_cleaned() hard assertions (used by pipelines)
+│       │
+│       ├── features/                      ← Interim → processed feature engineering
+│       │   ├── __init__.py                ← Re-exports build_customer_dataset, PREDICTION_DATE
+│       │   └── build_features.py          ← build_rfm_features()  → per-customer RFM features
+│       │                                  │   build_target()        → future_revenue + log1p transform
+│       │                                  │   build_customer_dataset() → join features + target
+│       │                                  │   save_customer_dataset()  → write to data/processed/
+│       │
+│       ├── models/                        ← Model training, evaluation, and inference
+│       │   ├── __init__.py                ← Re-exports train, evaluate, predict, load_model, save_model
+│       │   ├── train.py                   ← build_pipeline() → sklearn Pipeline (StandardScaler + OHE + Ridge)
+│       │   │                              │   train()      → fit pipeline, return metadata dict
+│       │   │                              │   save_model() → pickle pipeline + JSON metadata
+│       │   │                              │   load_model() → deserialise from disk
+│       │   ├── evaluate.py                ← evaluate() → RMSE/MAE/R² in log-space and GBP-space
+│       │   │                              │   saves results to reports/metrics/evaluation_metrics.json
+│       │   └── predict.py                 ← predict() → load pipeline + append pred columns to DataFrame
+│       │                                  │   pred_log1p_future_revenue, pred_future_revenue (GBP)
+│       │
+│       └── pipelines/                     ← End-to-end workflow orchestration
+│           ├── __init__.py                ← Re-exports run_training_pipeline
+│           └── training_pipeline.py       ← run_training_pipeline():
+│                                          │   1. Load / generate cleaned transactions
+│                                          │   2. Build customer dataset (features + target)
+│                                          │   3. Stratified 80/20 train/test split
+│                                          │   4. Fit pipeline on train, evaluate on test
+│                                          │   5. Refit final pipeline on full data, save model
+│
+├── tests/                                 ← Pytest test suite (no real dataset required)
+│   ├── test_data.py                       ← 27 tests: cleaning functions + diagnostic reporters
+│   ├── test_features.py                   ← 16 tests: RFM features, target, Group A/B/C logic
+│   └── test_models.py                     ← 18 tests: train / evaluate / predict / save-load
+│
+├── docs/                                  ← MkDocs documentation source
+│   └── docs/
+│       ├── index.md
+│       ├── getting-started.md
+│       └── problem-formulation.md
+│
+├── references/                            ← Data dictionaries, papers, background reading
+├── .gitignore
+├── LICENSE                                ← MIT
+├── Makefile                               ← make install | clean-data | train | test | lint | format
+├── pyproject.toml                         ← Build system (hatchling), dependencies, pytest config
+├── requirements.txt                       ← Pinned environment snapshot (pip freeze)
 └── README.md
 ```
 
